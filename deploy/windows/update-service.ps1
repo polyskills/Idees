@@ -9,7 +9,7 @@
 #>
 param(
     [string]$ServiceName = "LightspeedPennylane",
-    [string]$Branch = "claude/lightspeed-pennylane-converter-njmeyd"
+    [string]$Branch = "adaptools/lightspeed-converter"
 )
 
 $ErrorActionPreference = "Stop"

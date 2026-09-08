@@ -23,7 +23,7 @@ Ouvrir **PowerShell en tant qu'administrateur**, puis :
 cd C:\Apps
 git clone https://github.com/polyskills/Idees.git
 cd Idees
-git checkout claude/lightspeed-pennylane-converter-njmeyd
+git checkout adaptools/lightspeed-converter
 
 # 2. Lancer l'installation du service (Python, dépendances, NSSM, service, pare-feu)
 .\deploy\windows\install-service.ps1

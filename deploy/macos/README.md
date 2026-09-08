@@ -31,7 +31,7 @@ Ouvrir **Terminal**, puis :
 cd ~/Applications  # ou tout autre dossier
 git clone https://github.com/polyskills/Idees.git
 cd Idees
-git checkout claude/lightspeed-pennylane-converter-njmeyd
+git checkout adaptools/lightspeed-converter
 
 # 2. Rendre les scripts exécutables (une seule fois)
 chmod +x deploy/macos/*.sh

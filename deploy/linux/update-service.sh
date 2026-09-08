@@ -9,7 +9,7 @@
 set -euo pipefail
 
 SERVICE_NAME="lightspeed-pennylane"
-BRANCH="claude/lightspeed-pennylane-converter-njmeyd"
+BRANCH="adaptools/lightspeed-converter"
 
 while [ $# -gt 0 ]; do
     case "$1" in

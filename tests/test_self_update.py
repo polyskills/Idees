@@ -72,7 +72,7 @@ def _fake_git_ok(reset_modifie_requirements=None, req_path=None):
     vrai dépôt."""
     def fake_git(*args, timeout=15):
         if args[0] == "rev-parse" and args[1] == "--abbrev-ref":
-            return True, "claude/lightspeed-pennylane-converter-njmeyd"
+            return True, "adaptools/lightspeed-converter"
         if args[0] == "fetch":
             return True, ""
         if args[0] == "reset":
