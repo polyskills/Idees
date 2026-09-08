@@ -81,6 +81,9 @@ if st.session_state.get("conso_signature") != signature:
     st.session_state["conso_signature"] = signature
 
 if not uploaded_files:
+    # Même invitation qu'en bas de la page Convertisseur quand aucun fichier
+    # n'est déposé : la page ne doit jamais s'arrêter en silence.
+    st.info("Déposez les rapports Tickets et Transactions d'une même période pour démarrer.")
     st.stop()
 
 par_nom = {uf.name: uf for uf in uploaded_files}
