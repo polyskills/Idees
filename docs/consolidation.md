@@ -91,10 +91,12 @@ de calcul : elles n'empêchent pas d'utiliser le classeur.
 
 ## Limites à ce stade
 
-- **Pas de réception automatique par mail.** Contrairement à la conversion
-  comptable, la consolidation demande **deux fichiers appariés** ; le
-  rapprochement de deux pièces jointes reçues séparément reste à traiter. Le
-  dépôt manuel est pour l'instant le seul mode d'entrée.
+- **La réception automatique par mail demande deux réglages** sur le point de
+  vente (Table de correspondance) : une **adresse mail de consolidation**,
+  distincte de celle des exports comptables mais sur la même boîte, et le
+  **site de consolidation**. Sans le site, une paire reçue reste en attente et
+  un échec est signalé. Voir `docs/fetch_mail.md` pour le détail de
+  l'appariement des deux rapports.
 - **Les périodes de service sont définies dans le code**, pas dans la table de
   correspondance. Elles ne varient donc pas d'un client à l'autre. Le jour où
   ce sera nécessaire, leur place naturelle sera le référentiel du client.

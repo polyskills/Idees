@@ -10,6 +10,7 @@ import pandas as pd
 import streamlit as st
 
 from core.client_store import get_client
+from core.lightspeed_synthese import SITES
 from core.mapping_store import TOUS_POINTS_DE_VENTE, load_mappings, reset_to_empty, save_mappings, seed_with_examples
 from core.timezone import now_local
 from core.ui_common import select_client
@@ -189,6 +190,12 @@ with tab_pdv:
         "journal de ventes (ex. BAR → `VTBAR`, RESTAURANT → `VTRST`) ; plusieurs points de vente peuvent "
         "viser le même journal. Laissé vide, c'est le code journal par défaut de la page **Réglages** "
         "qui s'applique. "
+        "Le **site de consolidation** (BAR / RESTAURANT) fixe les périodes de service utilisées par "
+        "la page Consolidation ; il est obligatoire pour que les rapports reçus par mail soient "
+        "traités automatiquement. "
+        "L'**adresse mail de consolidation** est une seconde adresse dédiée, sur la même boîte que "
+        "l'adresse de réception : c'est elle qui aiguille un message vers la consolidation plutôt "
+        "que vers la conversion comptable. "
         "L'**adresse mail de réception** est optionnelle : si elle est renseignée, tout export LightSpeed reçu "
         "automatiquement à cette adresse sera rattaché à ce point de vente (voir la moulinette de "
         "réception automatique). Elle doit être unique entre tous les clients. "
@@ -202,7 +209,9 @@ with tab_pdv:
             "code": "Code point de vente",
             "libelle": "Libellé",
             "code_journal": "Code journal",
+            "site_consolidation": "Site de consolidation",
             "adresse_email": "Adresse mail de réception",
+            "adresse_email_consolidation": "Adresse mail de consolidation",
             "adresse_resultat": "Adresse mail de résultat",
             "commentaires": "Commentaires",
         },
@@ -212,7 +221,8 @@ with tab_pdv:
     edited_pdv_df = st.data_editor(
         _as_editable_df(
             mappings.get("points_de_vente", []),
-            ["code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires"],
+            ["code", "libelle", "code_journal", "site_consolidation",
+             "adresse_email", "adresse_email_consolidation", "adresse_resultat", "commentaires"],
             tri=tri_pdv,
             decroissant=decroissant_pdv,
         ),
@@ -227,9 +237,23 @@ with tab_pdv:
                 help="Journal de ventes propre à ce point de vente (ex. VTBAR, VTRST). "
                 "Laisser vide pour utiliser le code journal par défaut défini page Réglages.",
             ),
+            "site_consolidation": st.column_config.SelectboxColumn(
+                "Site de consolidation (optionnel)",
+                options=list(SITES),
+                help="Détermine les périodes de service appliquées par la page Consolidation "
+                "(ex. BAR : Journée / Afterwork / Soir / Nuit). Obligatoire pour que les rapports "
+                "reçus par mail sur l'adresse de consolidation puissent être traités automatiquement.",
+            ),
             "adresse_email": st.column_config.TextColumn(
                 "Adresse mail de réception (optionnelle)",
-                help="Adresse dédiée qui reçoit l'export automatique LightSpeed de ce point de vente.",
+                help="Adresse dédiée qui reçoit l'export comptable automatique LightSpeed de ce "
+                "point de vente, converti vers Pennylane.",
+            ),
+            "adresse_email_consolidation": st.column_config.TextColumn(
+                "Adresse mail de consolidation (optionnelle)",
+                help="Seconde adresse dédiée, sur la même boîte, qui reçoit les rapports Tickets et "
+                "Transactions. C'est l'adresse destinataire qui décide du traitement appliqué, "
+                "jamais le nom du fichier. Doit être unique entre tous les clients.",
             ),
             "adresse_resultat": st.column_config.TextColumn(
                 "Adresse mail de résultat (optionnelle)",

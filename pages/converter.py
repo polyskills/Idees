@@ -16,7 +16,6 @@ import datetime as dt
 
 import streamlit as st
 
-from core.client_store import get_client
 from core.converter import convert
 from core.email_ingest import date_aaaammjj
 from core.history_store import record_conversion
@@ -24,7 +23,7 @@ from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import find_code_journal, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
-from core.ui_common import select_client, styliser_zone_de_depot
+from core.ui_common import render_bouton_releve_mails, select_client, styliser_zone_de_depot
 
 
 # Mots-clés déclenchant la suggestion "BAR" : le nom du fichier LightSpeed ne
@@ -82,49 +81,12 @@ if not pdv_codes:
         "**Table de correspondance** pour en créer avant de convertir un fichier."
     )
 
-client = get_client(client_id)
-if client and client.get("email_tenant_id") and client.get("email_mailbox"):
-    with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
-        st.caption(
-            "Lance immédiatement un cycle de relève sur la boîte mail configurée pour ce client "
-            "(Réglages > Gestion Email), au lieu d'attendre le prochain passage du service "
-            "automatique ou de lancer `email_poller.py` en ligne de commande. Les mails non lus "
-            "avec pièce jointe sont traités exactement comme d'habitude (conversion, réponse, "
-            "alerte en cas d'échec) — voir la page **Historique** (sous Convertisseur) pour le "
-            "résultat détaillé."
-        )
-        if st.button("📧 Relever les mails maintenant"):
-            from core.email_poller import _identifiants_azure, traiter_client
-            from core.graph_client import GraphClient, GraphError
-
-            identifiants = _identifiants_azure(client)
-            if identifiants is None:
-                st.error(
-                    "Aucun identifiant Azure disponible pour ce client : renseignez « ID d'application » "
-                    "et « Secret client » ci-dessus (onglet Réglages > Gestion Email), ou définissez les "
-                    "variables d'environnement `LSPENNYLANE_AZURE_CLIENT_ID`/`LSPENNYLANE_AZURE_CLIENT_SECRET` "
-                    "sur ce serveur — voir `docs/configuration_m365_client.md`."
-                )
-            else:
-                azure_client_id, azure_client_secret = identifiants
-                graph = GraphClient(
-                    tenant_id=client["email_tenant_id"],
-                    client_id=azure_client_id,
-                    client_secret=azure_client_secret,
-                )
-                with st.spinner("Relève en cours..."):
-                    try:
-                        nb_recuperes = traiter_client(graph, client)
-                    except GraphError as exc:
-                        st.error(f"Échec de la relève (Microsoft Graph) : {exc}")
-                    except Exception as exc:  # noqa: BLE001 - remonter n'importe quel imprévu à l'écran plutôt que planter la page
-                        st.error(f"Échec de la relève : {exc}")
-                    else:
-                        pluriel = "s" if nb_recuperes != 1 else ""
-                        st.success(
-                            f"Cycle de relève terminé : {nb_recuperes} e-mail{pluriel} récupéré{pluriel}. "
-                            "Voir la page **Historique** (sous Convertisseur) pour le détail des conversions traitées."
-                        )
+render_bouton_releve_mails(
+    client_id,
+    contexte="Les exports comptables reçus sont convertis, archivés et renvoyés exactement "
+    "comme d'habitude — voir la page **Historique** sous Convertisseur pour le résultat détaillé.",
+    cle="releve_convertisseur",
+)
 
 st.subheader("1. Importer le ou les exports LightSpeed")
 

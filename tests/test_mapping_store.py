@@ -34,7 +34,8 @@ def test_build_export_global_xlsx_un_onglet_par_table():
     ]
     ws = wb["Points de vente"]
     rows = list(ws.iter_rows(values_only=True))
-    assert rows[0] == ("code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires")
+    assert rows[0] == ("code", "libelle", "code_journal", "site_consolidation",
+                       "adresse_email", "adresse_email_consolidation", "adresse_resultat", "commentaires")
     assert rows[1][:2] == ("REST", "Restaurant")
 
 

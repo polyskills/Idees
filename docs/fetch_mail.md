@@ -17,13 +17,20 @@ converti et renvoyé automatiquement, sans intervention.
 
 ## Principe : identifier par l'adresse, pas par le nom de fichier
 
-Chaque **point de vente** d'un client peut avoir sa propre adresse mail
-dédiée (champ `adresse_email`, page Table de correspondance). LightSpeed
-est configuré pour envoyer l'export comptable automatique de ce point de
-vente à cette adresse. À la réception :
+Chaque **point de vente** d'un client peut avoir **deux** adresses mail
+dédiées, sur la même boîte (page Table de correspondance) :
+
+| Champ | Ce qui y arrive | Traitement |
+|---|---|---|
+| `adresse_email` | export comptable | conversion vers Pennylane |
+| `adresse_email_consolidation` | rapports Tickets et Transactions | consolidation du CA |
+
+LightSpeed est configuré pour envoyer chaque export à l'adresse qui lui
+correspond. À la réception :
 
 1. l'adresse **destinataire** du mail suffit à elle seule à retrouver
-   **client + point de vente** (`core.mapping_store.find_client_pdv_by_email`) ;
+   **client, point de vente ET traitement visé**
+   (`core.mapping_store.find_client_pdv_par_adresse`) ;
 2. le **nom de fichier** ne sert qu'à extraire la **période couverte**
    (`core.email_ingest.extraire_periode`), pour pré-remplir la date de
    pièce — jamais à identifier le client, moins fiable.
@@ -40,7 +47,43 @@ contourne ce piège en lisant d'abord l'en-tête RFC5322 `To:` **brut**
 
 C'est délibéré : une adresse mal configurée déclenche une alerte interne
 immédiate (adresse inconnue), alors qu'un nom de fichier mal interprété
-aurait pu convertir silencieusement sur le mauvais référentiel.
+aurait pu convertir silencieusement sur le mauvais référentiel — ou, depuis
+l'arrivée de la consolidation, envoyer un export comptable dans la mauvaise
+moulinette.
+
+## Consolidation : deux rapports, deux messages
+
+Une consolidation a besoin des rapports **Tickets** et **Transactions** d'une
+même période, et Lightspeed les envoie dans **deux messages distincts**. Le
+poller ne peut donc pas produire un résultat dès le premier message.
+
+Le premier rapport arrivé est rangé dans un **sas d'attente**
+(`core/consolidation_sas.py`, sous `data/clients/<id>/consolidations/en_attente/`)
+et son message est marqué lu comme d'habitude. La consolidation se déclenche
+à l'arrivée du binôme, puis le sas est vidé.
+
+- **Clé d'appariement** : `(point de vente, date de début, date de fin)`. Le
+  point de vente vient de l'adresse, la période du nom de fichier
+  (`..._AAAAMMJJ_AAAAMMJJ.xls`). Jamais de l'heure d'arrivée, qui ne prouve
+  rien. Deux journées peuvent donc attendre en parallèle sans se mélanger.
+- **Quel rapport** est déterminé par le nom de fichier (`_tickets_` /
+  `_transactions_`) — c'est le seul rôle du nom ici, les deux rapports
+  arrivant sur la même adresse. Une interversion serait de toute façon
+  rattrapée par le contrôle de colonnes à la lecture.
+- **L'ordre d'arrivée est indifférent**, et un renvoi du même rapport
+  remplace le précédent (c'est presque toujours une correction).
+- **Un rapport resté seul plus de 4 h déclenche une alerte interne**, une
+  seule fois — un export qui ne part plus côté Lightspeed ne doit pas passer
+  inaperçu, la consolidation se contentant sinon de ne jamais se déclencher.
+  Le rapport reçu est conservé : un envoi tardif complète encore la paire.
+  Au-delà de 7 jours, il est abandonné.
+- **Le site de consolidation** (BAR / RESTAURANT) doit être renseigné sur le
+  point de vente : il fixe les périodes de service. S'il manque, la paire
+  **reste dans le sas** et un échec est signalé — jamais de perte, jamais de
+  repli silencieux sur un site deviné.
+
+L'attente est visible page Consolidation, dans le panneau « rapports reçus par
+mail, en attente de leur binôme ».
 
 ## Où vivent les boîtes mail
 

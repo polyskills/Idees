@@ -67,7 +67,10 @@ Tables :
                          paramètres généraux, cf. find_code_journal + adresse mail
                          de réception de l'export automatique, optionnelle + adresse mail
                          de résultat, optionnelle - destinataire du CSV et du récapitulatif
-                         après conversion, par défaut l'adresse de réception elle-même)
+                         après conversion, par défaut l'adresse de réception elle-même
+                         + adresse mail dédiée à la CONSOLIDATION, optionnelle, et site
+                         de consolidation (BAR/RESTAURANT) qui en fixe les périodes de
+                         service)
 - parametres           : réglages généraux (code journal par défaut, compte d'écart/report, etc.)
 """
 from __future__ import annotations
@@ -86,6 +89,13 @@ from core.client_store import client_mappings_path
 # ligne plus spécifique. Valeur explicite plutôt qu'un champ vide, pour ne pas
 # laisser croire à un oubli de saisie en le lisant dans le tableau.
 TOUS_POINTS_DE_VENTE = "TOUS"
+
+# Traitement visé par un mail entrant, déterminé par l'adresse qui l'a reçu.
+# C'est l'adresse qui fait foi, jamais le nom de fichier : un export comptable
+# qui contiendrait par hasard « tickets » dans son nom ne doit pas basculer en
+# consolidation (cf. docstring de core.email_ingest).
+TRAITEMENT_CONVERSION = "conversion"
+TRAITEMENT_CONSOLIDATION = "consolidation"
 
 EMPTY_MAPPINGS = {
     "parametres": {
@@ -341,13 +351,15 @@ def find_compte_tva(mappings: dict, taux: str) -> dict | None:
     return None
 
 
-def find_client_pdv_by_email(adresse_email: str) -> tuple[str, str] | None:
-    """Retrouve (client_id, code_point_de_vente) à partir de l'adresse mail
-    dédiée qui a reçu un export automatique. Utilisé par le service de fetch
-    mail pour identifier client et point de vente sans jamais dépendre du nom
-    de fichier : chaque point de vente a sa propre adresse (voir page
-    « Table de correspondance »), ce qui rend l'identification fiable même si
-    LightSpeed change un jour sa convention de nommage de fichier.
+def find_client_pdv_par_adresse(adresse_email: str) -> tuple[str, str, str] | None:
+    """Retrouve (client_id, code_point_de_vente, traitement) à partir de
+    l'adresse dédiée qui a reçu un export automatique.
+
+    Chaque point de vente peut avoir DEUX adresses distinctes sur la même
+    boîte : `adresse_email` pour les exports comptables (conversion vers
+    Pennylane) et `adresse_email_consolidation` pour les rapports Tickets et
+    Transactions. C'est donc l'adresse destinataire, et elle seule, qui décide
+    du traitement appliqué.
 
     Parcourt tous les clients à chaque appel plutôt que de maintenir un index
     séparé : le nombre de clients reste faible, et ça évite tout risque
@@ -361,8 +373,27 @@ def find_client_pdv_by_email(adresse_email: str) -> tuple[str, str] | None:
         mappings = load_mappings(client["id"])
         for pdv in mappings.get("points_de_vente", []):
             if _norm_key(pdv.get("adresse_email", "")) == target:
-                return client["id"], pdv["code"]
+                return client["id"], pdv["code"], TRAITEMENT_CONVERSION
+            if _norm_key(pdv.get("adresse_email_consolidation", "")) == target:
+                return client["id"], pdv["code"], TRAITEMENT_CONSOLIDATION
     return None
+
+
+def find_client_pdv_by_email(adresse_email: str) -> tuple[str, str] | None:
+    """Retrouve (client_id, code_point_de_vente) à partir de l'adresse mail
+    dédiée qui a reçu un export automatique. Utilisé par le service de fetch
+    mail pour identifier client et point de vente sans jamais dépendre du nom
+    de fichier : chaque point de vente a sa propre adresse (voir page
+    « Table de correspondance »), ce qui rend l'identification fiable même si
+    LightSpeed change un jour sa convention de nommage de fichier.
+
+    Restreint à la CONVERSION comptable : une adresse dédiée à la consolidation
+    n'est pas reconnue ici (cf. find_client_pdv_par_adresse, qui couvre les
+    deux et dit lequel des deux traitements est visé)."""
+    trouve = find_client_pdv_par_adresse(adresse_email)
+    if trouve is None or trouve[2] != TRAITEMENT_CONVERSION:
+        return None
+    return trouve[0], trouve[1]
 
 
 def find_pdv(mappings: dict, code_pdv: str) -> dict | None:
@@ -414,7 +445,9 @@ def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> 
 # à Comptes de vente PL) plutôt que le seul code stocké ; Attribution
 # analytique a en plus une ligne par département en stockage, pas par groupe.
 _TABLES_EXPORT_GLOBAL = [
-    ("Points de vente", "points_de_vente", ["code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires"]),
+    ("Points de vente", "points_de_vente", ["code", "libelle", "code_journal", "site_consolidation",
+                                            "adresse_email", "adresse_email_consolidation",
+                                            "adresse_resultat", "commentaires"]),
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
     ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
     ("Moyens de paiements", "comptes_paiement", ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"]),

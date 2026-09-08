@@ -9,7 +9,7 @@ import html
 import streamlit as st
 
 from core.app_config import get_footer_sidebar
-from core.client_store import create_client, list_clients
+from core.client_store import create_client, get_client, list_clients
 from core.timezone import to_local
 from core.version_info import get_version_info
 
@@ -186,3 +186,66 @@ def styliser_zone_de_depot() -> None:
         """,
         height=1,
     )
+
+
+def render_bouton_releve_mails(client_id: str, contexte: str, cle: str) -> None:
+    """Bouton « Relever les mails maintenant », partagé par les pages
+    Convertisseur et Consolidation.
+
+    Un cycle traite TOUTE la boîte du client — exports comptables comme
+    rapports de consolidation, chacun aiguillé par l'adresse qui l'a reçu
+    (cf. core.email_ingest). Les deux pages déclenchent donc exactement le
+    même traitement ; seul le texte d'accompagnement diffère, d'où `contexte`.
+    `cle` distingue les deux boutons, qui peuvent coexister dans une session.
+
+    N'affiche rien si le fetch automatique n'est pas configuré pour ce client
+    (pas de tenant ni de boîte mail) : proposer un bouton sans effet serait
+    plus déroutant que de ne rien proposer."""
+    client = get_client(client_id)
+    if not client or not client.get("email_tenant_id") or not client.get("email_mailbox"):
+        return
+
+    with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
+        st.caption(
+            "Lance immédiatement un cycle de relève sur la boîte mail configurée pour ce client "
+            "(Réglages > Gestion Email), au lieu d'attendre le prochain passage du service "
+            "automatique ou de lancer `email_poller.py` en ligne de commande. Le cycle traite "
+            "**tous** les mails non lus avec pièce jointe de cette boîte, exports comptables "
+            "comme rapports de consolidation : c'est l'adresse destinataire de chaque message "
+            "qui décide du traitement appliqué. " + contexte
+        )
+        if not st.button("📧 Relever les mails maintenant", key=cle):
+            return
+
+        from core.email_poller import _identifiants_azure, traiter_client
+        from core.graph_client import GraphClient, GraphError
+
+        identifiants = _identifiants_azure(client)
+        if identifiants is None:
+            st.error(
+                "Aucun identifiant Azure disponible pour ce client : renseignez « ID d'application » "
+                "et « Secret client » (onglet Réglages > Gestion Email), ou définissez les variables "
+                "d'environnement `LSPENNYLANE_AZURE_CLIENT_ID`/`LSPENNYLANE_AZURE_CLIENT_SECRET` "
+                "sur ce serveur — voir `docs/configuration_m365_client.md`."
+            )
+            return
+
+        azure_client_id, azure_client_secret = identifiants
+        graph = GraphClient(
+            tenant_id=client["email_tenant_id"],
+            client_id=azure_client_id,
+            client_secret=azure_client_secret,
+        )
+        with st.spinner("Relève en cours..."):
+            try:
+                nb_recuperes = traiter_client(graph, client)
+            except GraphError as exc:
+                st.error(f"Échec de la relève (Microsoft Graph) : {exc}")
+            except Exception as exc:  # noqa: BLE001 - remonter n'importe quel imprévu à l'écran plutôt que planter la page
+                st.error(f"Échec de la relève : {exc}")
+            else:
+                pluriel = "s" if nb_recuperes != 1 else ""
+                st.success(
+                    f"Cycle de relève terminé : {nb_recuperes} e-mail{pluriel} récupéré{pluriel}. "
+                    "Voir les pages « Historique » pour le détail de ce qui a été traité."
+                )

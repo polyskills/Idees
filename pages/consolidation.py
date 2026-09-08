@@ -27,7 +27,8 @@ from core.lightspeed_synthese import (
     deviner_site,
 )
 from core.timezone import now_local
-from core.ui_common import select_client, styliser_zone_de_depot
+from core.consolidation_sas import DELAI_ALERTE_HEURES, lister as lister_en_attente, rapport_manquant
+from core.ui_common import render_bouton_releve_mails, select_client, styliser_zone_de_depot
 
 client_id = select_client()
 
@@ -43,24 +44,40 @@ if client_id is None:
     st.info("Créez un client (menu latéral, ou page **Clients**) avant de pouvoir lancer une consolidation.")
     st.stop()
 
-# Emplacement réservé à la relève manuelle des mails, volontairement inactif à
-# ce stade. La conversion comptable traite UNE pièce jointe par message ; la
-# consolidation en demande DEUX, appariées — les rapports Tickets et
-# Transactions de la même période. Les apparier (même message ou messages
-# distincts, attente du second, vérification que les deux couvrent bien la même
-# période) est un sujet à part entière, à traiter une fois la version manuelle
-# validée. L'emplacement est posé ici, à la même place et sous le même libellé
-# que page Convertisseur, pour que la page ne se réorganise pas le jour où il
-# devient actif.
-with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
-    st.info(
-        "**Pas encore disponible pour la consolidation.** Contrairement à la conversion "
-        "comptable, qui traite une pièce jointe par message, la consolidation a besoin des "
-        "**deux rapports d'une même période** — Tickets et Transactions. Leur rapprochement "
-        "automatique fera l'objet d'une évolution dédiée, une fois la version manuelle validée. "
-        "En attendant, déposez les fichiers ci-dessous."
-    )
-    st.button("📧 Relever les mails maintenant", disabled=True, key="conso_fetch_indisponible")
+render_bouton_releve_mails(
+    client_id,
+    contexte="Les rapports de consolidation reçus sont mis en attente jusqu'à ce que leur binôme "
+    "arrive — Tickets attend Transactions et réciproquement — puis la synthèse est produite et "
+    "renvoyée automatiquement.",
+    cle="releve_consolidation",
+)
+
+# Rapports reçus par mail dont le binôme n'est pas encore arrivé. Affiché même
+# quand tout va bien : c'est la seule fenêtre sur une attente qui, sinon, ne se
+# manifeste que par une consolidation qui ne vient pas.
+en_attente = lister_en_attente(client_id)
+if en_attente:
+    with st.expander(f"⏳ {len(en_attente)} rapport(s) reçu(s) par mail, en attente de leur binôme", expanded=False):
+        st.caption(
+            f"Un rapport resté seul plus de {DELAI_ALERTE_HEURES} h déclenche une alerte interne. "
+            "Il est conservé : un envoi tardif complète la paire et lance la consolidation."
+        )
+        st.dataframe(
+            [
+                {
+                    "Point de vente": e.get("code_pdv", ""),
+                    "Période": f"{e.get('date_debut') or '?'} → {e.get('date_fin') or '?'}",
+                    "Reçu": ", ".join(sorted(e.get("rapports", {}))),
+                    "En attente de": rapport_manquant(e) or "— (paire complète, en échec)",
+                    "Depuis": min(
+                        (r.get("horodatage", "") for r in e.get("rapports", {}).values()), default=""
+                    ),
+                }
+                for e in en_attente
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
 st.subheader("1. Importer les rapports Tickets et Transactions")
 styliser_zone_de_depot()

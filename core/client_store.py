@@ -7,6 +7,7 @@ Chaque client dispose de son propre espace isolé sous data/clients/<id>/ :
 - history/files/              : fichiers source et générés de ces conversions
 - consolidations/index.jsonl  : journal append-only de ses consolidations de CA
 - consolidations/files/       : rapports source et classeurs de ces consolidations
+- consolidations/en_attente/  : rapports reçus par mail en attente de leur binôme
 
 Conversion comptable et consolidation sont deux besoins distincts : elles ont
 donc chacune leur journal et leur dossier de fichiers, jamais un stockage
@@ -182,3 +183,11 @@ def client_consolidation_index_path(client_id: str) -> str:
 
 def client_consolidation_files_dir(client_id: str) -> str:
     return os.path.join(client_dir(client_id), "consolidations", "files")
+
+
+def client_consolidation_sas_dir(client_id: str) -> str:
+    """Sas d'attente d'appariement : un rapport de consolidation reçu par mail
+    y patiente jusqu'à l'arrivée de son binôme (Tickets attend Transactions et
+    réciproquement), les deux arrivant dans des messages distincts. Vidé dès
+    que la paire est traitée — cf. core.consolidation_sas."""
+    return os.path.join(client_dir(client_id), "consolidations", "en_attente")

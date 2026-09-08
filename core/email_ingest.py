@@ -6,9 +6,13 @@ quel tenant M365 héberge les adresses dédiées — cf. échange client) : il
 fournit uniquement la logique déterministe, indépendante du transport, que le
 futur service de fetch appellera pour chaque pièce jointe reçue :
 
-1. identifier client + point de vente à partir de l'adresse destinataire du
-   mail (cf. core.mapping_store.find_client_pdv_by_email) — jamais à partir
-   du nom de fichier, qui n'est pas une source fiable pour ça ;
+1. identifier client, point de vente ET traitement visé à partir de l'adresse
+   destinataire du mail (cf. core.mapping_store.find_client_pdv_par_adresse)
+   — jamais à partir du nom de fichier, qui n'est pas une source fiable pour
+   ça : un point de vente dispose de deux adresses distinctes sur la même
+   boîte, l'une pour les exports comptables (conversion), l'autre pour les
+   rapports Tickets/Transactions (consolidation), et c'est celle qui a reçu
+   le message qui décide ;
 2. extraire la période couverte par l'export depuis le nom de fichier, pour
    pré-remplir la date de pièce.
 
@@ -30,7 +34,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from core.mapping_store import find_client_pdv_by_email
+from core.mapping_store import TRAITEMENT_CONVERSION, find_client_pdv_par_adresse
 
 # Ancré en fin de nom de fichier (juste avant une éventuelle extension) plutôt
 # que sur le libellé fixe "business_export_accounting_" : ce dernier n'est
@@ -50,6 +54,10 @@ class SourceIdentifiee:
     date_debut: str | None  # "dd/mm/aa"
     date_fin: str | None    # "dd/mm/aa"
     avertissement: str | None = None
+    # Conversion comptable ou consolidation de CA : déterminé par l'adresse
+    # destinataire, chaque point de vente pouvant disposer des deux sur la même
+    # boîte (cf. core.mapping_store.find_client_pdv_par_adresse).
+    traitement: str = TRAITEMENT_CONVERSION
 
 
 def _formate_date(brut: str) -> str:
@@ -83,13 +91,13 @@ def identifier_source(adresse_destinataire: str, filename: str) -> SourceIdentif
     donnée. Lève EmailIngestError si l'adresse destinataire n'est rattachée
     à aucun point de vente du référentiel (mail à ne pas traiter
     automatiquement — alerte interne plutôt que perte silencieuse)."""
-    trouve = find_client_pdv_by_email(adresse_destinataire)
+    trouve = find_client_pdv_par_adresse(adresse_destinataire)
     if trouve is None:
         raise EmailIngestError(
             f"Adresse « {adresse_destinataire} » non rattachée à un point de vente : "
             "vérifier la table de correspondance avant de pouvoir traiter ce mail automatiquement."
         )
-    client_id, code_pdv = trouve
+    client_id, code_pdv, traitement = trouve
 
     date_debut, date_fin = extraire_periode(filename)
 
@@ -106,4 +114,5 @@ def identifier_source(adresse_destinataire: str, filename: str) -> SourceIdentif
         date_debut=date_debut,
         date_fin=date_fin,
         avertissement=avertissement,
+        traitement=traitement,
     )

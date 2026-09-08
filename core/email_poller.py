@@ -40,10 +40,23 @@ import re
 from core.app_config import get_url_app
 from core.client_store import get_prefixe_mail, list_clients
 from core.converter import convert
+from core.consolidation_sas import (
+    DELAI_ALERTE_HEURES,
+    charger_paire,
+    cle_appariement,
+    deposer,
+    est_complet,
+    marquer_signale,
+    orphelins_a_signaler,
+    purger_expires,
+    rapport_manquant,
+    retirer,
+)
 from core.email_ingest import EmailIngestError, date_aaaammjj, identifier_source
-from core.history_store import record_conversion
+from core.history_store import record_consolidation, record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
-from core.mapping_store import find_pdv, load_mappings
+from core.lightspeed_synthese import SITES, SyntheseError, classer_fichiers, construire_synthese
+from core.mapping_store import TRAITEMENT_CONSOLIDATION, find_pdv, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
 
@@ -96,6 +109,9 @@ def traiter_client(graph, client: dict) -> int:
     for message in graph.list_unread_with_attachments(mailbox):
         if traiter_message(graph, mailbox, message, prefixe_mail):
             nb_recuperes += 1
+    # Après le traitement des messages, et pas avant : un rapport attendu
+    # depuis 4 h peut très bien être complété par le cycle en cours.
+    signaler_orphelins(graph, mailbox, client["id"])
     return nb_recuperes
 
 
@@ -171,6 +187,15 @@ def _traiter_piece_jointe(
     adresses_notification = _adresses_resultat(pdv, repli=adresse_cible)
     periode = f"{source.date_debut or '?'} → {source.date_fin or '?'}"
 
+    # C'est l'adresse destinataire qui a décidé du traitement, pas le nom du
+    # fichier (cf. core.email_ingest) : un point de vente a une adresse pour
+    # ses exports comptables et une autre pour ses rapports d'exploitation.
+    if source.traitement == TRAITEMENT_CONSOLIDATION:
+        _traiter_rapport_consolidation(
+            graph, mailbox, source, pdv, adresses_notification, filename, raw, periode, prefixe_mail
+        )
+        return
+
     try:
         export = parse_lightspeed_export(raw, filename)
     except LightspeedParseError as exc:
@@ -226,6 +251,181 @@ def _traiter_piece_jointe(
             filename=filename, detail=detail, raw=raw, point_de_vente=source.code_pdv, periode=periode,
             prefixe_mail=prefixe_mail,
         )
+
+
+# --- Consolidation : appariement de deux rapports arrivés séparément --------
+
+
+def _traiter_rapport_consolidation(
+    graph, mailbox: str, source, pdv: dict | None, adresses_notification: list[str],
+    filename: str, raw: bytes, periode: str, prefixe_mail: str,
+) -> None:
+    """Range un rapport dans le sas d'attente, puis consolide dès que son
+    binôme est là (cf. core.consolidation_sas). Un rapport seul ne produit
+    rien et n'est pas une anomalie : c'est le fonctionnement normal, les deux
+    rapports arrivant dans deux messages distincts."""
+    tickets, transactions, _ = classer_fichiers([filename])
+    type_rapport = "tickets" if tickets else ("transactions" if transactions else None)
+
+    if type_rapport is None:
+        detail = (
+            f"« {filename} » : impossible de dire s'il s'agit du rapport Tickets ou du rapport "
+            "Transactions. Le nom d'un export Lightspeed doit contenir « _tickets_ » ou "
+            "« _transactions_ » pour pouvoir être apparié automatiquement."
+        )
+        _alerter(graph, mailbox, sujet=f"Rapport de consolidation non identifié — {filename}", detail=detail)
+        _notifier_echec_client(
+            graph, mailbox, adresses_notification, sujet="Échec de traitement de votre rapport Lightspeed",
+            filename=filename, detail=detail, raw=raw, point_de_vente=source.code_pdv,
+            periode=periode, prefixe_mail=prefixe_mail,
+        )
+        return
+
+    if not source.date_debut or not source.date_fin:
+        detail = (
+            f"« {filename} » : période introuvable dans le nom du fichier (deux dates AAAAMMJJ "
+            "attendues en fin de nom). Sans elle, impossible de savoir à quel autre rapport "
+            "l'apparier."
+        )
+        _alerter(graph, mailbox, sujet=f"Rapport de consolidation non appariable — {filename}", detail=detail)
+        _notifier_echec_client(
+            graph, mailbox, adresses_notification, sujet="Échec de traitement de votre rapport Lightspeed",
+            filename=filename, detail=detail, raw=raw, point_de_vente=source.code_pdv,
+            periode=periode, prefixe_mail=prefixe_mail,
+        )
+        return
+
+    horodatage = now_local().strftime("%Y-%m-%d %H:%M:%S")
+    etat = deposer(
+        source.client_id, source.code_pdv, source.date_debut, source.date_fin,
+        type_rapport, filename, raw, horodatage, adresses_notification,
+    )
+
+    if not est_complet(etat):
+        log.info(
+            "Consolidation %s/%s %s : rapport %s reçu, en attente de %s.",
+            source.client_id, source.code_pdv, periode, type_rapport, rapport_manquant(etat),
+        )
+        return
+
+    _consolider_paire(graph, mailbox, source, pdv, etat, periode, prefixe_mail)
+
+
+def _consolider_paire(graph, mailbox: str, source, pdv: dict | None, etat: dict,
+                      periode: str, prefixe_mail: str) -> None:
+    """Paire complète : consolide, archive, envoie. En cas d'échec, la paire
+    RESTE dans le sas — les fichiers sont la seule copie disponible côté
+    application, et un site mal renseigné se corrige puis se rejoue à la main
+    plutôt que de tout perdre."""
+    cle = etat["cle"]
+    # Destinataires des deux messages confondus : ils sont normalement
+    # identiques, mais si l'adresse résultat a changé entre les deux, mieux
+    # vaut informer les deux que d'en oublier un.
+    adresses = list(dict.fromkeys(
+        a for r in etat["rapports"].values() for a in (r.get("adresses_notification") or [])
+    ))
+    noms = ", ".join(r["nom_fichier"] for r in etat["rapports"].values())
+
+    site = ((pdv or {}).get("site_consolidation") or "").strip().upper()
+    if site not in SITES:
+        detail = (
+            f"Point de vente « {source.code_pdv} » : le site de consolidation n'est pas renseigné "
+            f"(attendu : {', '.join(SITES)}). Il détermine les périodes de service, la consolidation "
+            "ne peut pas être calculée sans lui — à compléter dans la Table de correspondance, "
+            "onglet Points de vente, puis relancer la consolidation manuellement."
+        )
+        _alerter(graph, mailbox, sujet=f"Consolidation impossible — {source.code_pdv} {periode}", detail=detail)
+        _notifier_echec_client(
+            graph, mailbox, adresses, sujet="Échec de consolidation de vos rapports Lightspeed",
+            filename=noms, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            prefixe_mail=prefixe_mail,
+        )
+        return
+
+    paire = charger_paire(source.client_id, cle)
+    if paire is None:
+        _alerter(
+            graph, mailbox, sujet=f"Consolidation impossible — {source.code_pdv} {periode}",
+            detail=f"Les fichiers du sas d'attente sont introuvables pour la clé {cle}.",
+        )
+        return
+
+    try:
+        res = construire_synthese(paire[0], paire[1], site)
+    except SyntheseError as exc:
+        detail = f"{exc}"
+        _alerter(graph, mailbox, sujet=f"Échec de consolidation — {source.code_pdv} {periode}", detail=detail)
+        _notifier_echec_client(
+            graph, mailbox, adresses, sujet="Échec de consolidation de vos rapports Lightspeed",
+            filename=noms, detail=detail, point_de_vente=source.code_pdv, periode=periode,
+            prefixe_mail=prefixe_mail,
+        )
+        return
+
+    sources = list(paire[0]) + list(paire[1])
+    record_consolidation(source.client_id, res, sources, now_local().strftime("%Y-%m-%d %H:%M:%S"))
+    _envoyer_resultat_consolidation(graph, mailbox, adresses, source, res, sources, prefixe_mail)
+    retirer(source.client_id, cle)
+
+
+def _envoyer_resultat_consolidation(
+    graph, mailbox, adresses: list[str], source, res, sources: list, prefixe_mail: str,
+) -> None:
+    alerte = "" if res.sans_anomalie_bloquante else (
+        f"<p>❌ Écart de {res.ecart_controle:+.2f} € entre le total des transactions et celui des "
+        "tickets : les deux rapports ne couvrent probablement pas exactement la même période. "
+        "Les totaux ci-dessus ne sont pas fiables en l'état.</p>"
+    )
+    a_verifier = res.anomalies_a_verifier
+    corps = (
+        f"<p>Consolidation automatique effectuée pour <b>{source.client_id} / {source.code_pdv}</b> "
+        f"({res.site} — {res.periode_libelle}).</p>"
+        f"<ul>"
+        f"<li>CA TTC : {res.ca_ttc:,.2f} €</li>"
+        f"<li>CA HT : {res.ca_ht:,.2f} €</li>"
+        f"<li>Couverts : {res.couverts}</li>"
+        f"<li>{res.nb_tickets} tickets, {res.nb_lignes} lignes de transaction</li>"
+        f"</ul>"
+        + alerte
+        + (f"<p>⚠️ {len(a_verifier)} point(s) à vérifier — voir l'onglet ANOMALIES du classeur.</p>" if a_verifier else "")
+        + _pied_de_page_lien_app()
+    )
+    jour = res.jours[0].strftime("%Y%m%d") if res.jours else "sansdate"
+    graph.send_mail(
+        mailbox,
+        subject=f"[{prefixe_mail}] Consolidation - {source.client_id.upper()}/{source.code_pdv} - {res.periode_libelle}",
+        body_html=corps,
+        to_addresses=adresses,
+        attachments=[(nom, contenu) for nom, contenu in sources]
+        + [(f"synthese_{res.site.lower()}_{jour}.xlsx", res.classeur)],
+    )
+
+
+def signaler_orphelins(graph, mailbox: str, client_id: str) -> int:
+    """Signale les rapports restés seuls au-delà de DELAI_ALERTE_HEURES, et
+    abandonne ceux devenus trop anciens. Appelé à chaque cycle : sans ça, un
+    export qui ne part plus côté Lightspeed passerait inaperçu, la
+    consolidation se contentant de ne jamais se déclencher."""
+    maintenant = now_local().replace(tzinfo=None)
+    nb = 0
+    for etat in orphelins_a_signaler(client_id, maintenant):
+        manquant = rapport_manquant(etat)
+        recu = [t for t in etat["rapports"]]
+        _alerter(
+            graph, mailbox,
+            sujet=f"Rapport de consolidation manquant — {etat['code_pdv']} "
+                  f"{etat.get('date_debut') or '?'} → {etat.get('date_fin') or '?'}",
+            detail=(
+                f"Le rapport « {manquant} » n'est toujours pas arrivé plus de {DELAI_ALERTE_HEURES} h "
+                f"après « {', '.join(recu)} » ({etat['client_id']} / {etat['code_pdv']}). "
+                "La consolidation reste en attente : vérifier l'export automatique côté Lightspeed. "
+                "Le rapport déjà reçu est conservé, un envoi tardif complétera la paire."
+            ),
+        )
+        marquer_signale(client_id, etat["cle"])
+        nb += 1
+    purger_expires(client_id, maintenant)
+    return nb
 
 
 def _adresses_resultat(pdv: dict | None, repli: str) -> list[str]:
