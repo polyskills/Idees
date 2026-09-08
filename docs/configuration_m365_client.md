@@ -142,6 +142,11 @@ d'administration Microsoft 365` → **Groupes** → **Boîtes partagées** →
 créer la boîte, puis onglet **Alias e-mail** pour ajouter une adresse par
 point de vente).
 
+Si le client utilise aussi la **consolidation du CA**, prévoir un **second
+alias** pour ce même point de vente, sur la même boîte : c'est l'adresse
+destinataire qui aiguille un message vers la conversion comptable ou vers la
+consolidation. Deux alias distincts, une seule boîte à interroger.
+
 **Aucune licence n'est nécessaire** : une boîte partagée standard est
 gratuite (stockage par défaut ~50 Go, largement suffisant pour des
 exports comptables), et l'accès utilisé ici est en **permissions
@@ -199,10 +204,10 @@ fetch échouera pour ce client.
 Dans LightSpeed (paramétrage des exports comptables du point de vente
 concerné), configurer l'envoi automatique périodique de l'export
 comptable vers l'**adresse dédiée** de ce point de vente (alias créé à
-l'étape 2, ou boîte dédiée). Une adresse par point de vente, jamais une
-adresse partagée entre deux points de vente : c'est cette adresse qui
-permet à LS2PL de distinguer les points de vente à la réception,
-**jamais** le nom du fichier joint.
+l'étape 2, ou boîte dédiée). Une adresse par point de vente et par nature
+d'export, jamais une adresse partagée entre deux points de vente : c'est
+cette adresse qui permet à LS2PL de distinguer les points de vente **et le
+traitement à appliquer** à la réception, **jamais** le nom du fichier joint.
 
 ➡️ **Dans LS2PL** : page **Table de correspondance** → **Points de vente**
 → champ **`adresse_email`** du point de vente correspondant. C'est cette
@@ -210,6 +215,16 @@ correspondance (adresse → point de vente) qui identifie le point de vente
 recevant réellement l'export ; toute adresse non reconnue déclenche une
 **alerte interne** (mail marqué comme non identifié) au lieu d'une
 conversion, par sécurité.
+
+### Rapports de consolidation (optionnel)
+
+Si le client utilise la consolidation du CA, configurer dans LightSpeed
+l'envoi des rapports **Tickets** et **Transactions** vers le **second alias**
+du point de vente, renseigné dans le champ **`adresse_email_consolidation`**.
+Les deux rapports arrivent dans deux messages distincts : le premier reçu
+patiente jusqu'à l'arrivée de son binôme, puis la synthèse est produite et
+renvoyée (voir `docs/fetch_mail.md`). Renseigner aussi le **site de
+consolidation** du point de vente, faute de quoi la paire reste en attente.
 
 ---
 

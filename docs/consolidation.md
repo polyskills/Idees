@@ -89,14 +89,30 @@ Les autres anomalies (groupes non mappés, tickets annulés, période d'ouvertur
 différant du profil Lightspeed) sont des **points à vérifier**, pas des erreurs
 de calcul : elles n'empêchent pas d'utiliser le classeur.
 
+## Réception automatique par mail
+
+Les deux rapports peuvent arriver par mail plutôt qu'être déposés à la main.
+Ils sont envoyés par LightSpeed dans **deux messages distincts** : le premier
+reçu patiente jusqu'à l'arrivée de son binôme, puis la synthèse est produite,
+archivée et renvoyée automatiquement.
+
+Deux réglages sont nécessaires sur le point de vente (Table de correspondance) :
+
+- une **adresse mail de consolidation**, distincte de celle des exports
+  comptables mais sur la même boîte — c'est elle qui aiguille le message vers
+  la consolidation plutôt que vers la conversion ;
+- le **site de consolidation**. Sans lui, la paire reçue reste en attente et un
+  échec est signalé, plutôt que d'être calculée avec des périodes devinées.
+
+Un rapport resté seul plus de 4 h déclenche une alerte interne. Les rapports en
+attente sont visibles en haut de la page Consolidation. Voir
+`docs/fetch_mail.md` pour le détail de l'appariement.
+
 ## Limites à ce stade
 
-- **La réception automatique par mail demande deux réglages** sur le point de
-  vente (Table de correspondance) : une **adresse mail de consolidation**,
-  distincte de celle des exports comptables mais sur la même boîte, et le
-  **site de consolidation**. Sans le site, une paire reçue reste en attente et
-  un échec est signalé. Voir `docs/fetch_mail.md` pour le détail de
-  l'appariement des deux rapports.
 - **Les périodes de service sont définies dans le code**, pas dans la table de
   correspondance. Elles ne varient donc pas d'un client à l'autre. Le jour où
   ce sera nécessaire, leur place naturelle sera le référentiel du client.
+- **La réception par mail n'a jamais été éprouvée en conditions réelles** :
+  toute la logique est couverte par les tests, mais aucun tenant client n'a
+  encore été branché (cf. `docs/fetch_mail.md`).

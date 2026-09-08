@@ -10,7 +10,9 @@ purement indicatives — comptes 511100/530000/445711.../etc. n'ont aucune
 valeur réelle) :
 
 - [ ] **Points de vente** : un par site/salle/activité réellement facturé,
-  avec son **code journal** s'il tient le sien (sinon celui par défaut)
+  avec son **code journal** s'il tient le sien (sinon celui par défaut).
+  Pour la consolidation du CA, renseigner en plus son **site de
+  consolidation** (BAR / RESTAURANT), qui fixe les périodes de service
 - [ ] **Comptes de vente** : le référentiel des comptes de vente Pennylane
   utilisés (sert de liste de choix aux deux tables suivantes)
 - [ ] **Départements LightSpeed** : une ligne par département LightSpeed
@@ -49,6 +51,13 @@ pour l'installation du service. En résumé :
 - [ ] Cette adresse renseignée dans le champ **adresse_email** du point de
   vente correspondant (page Table de correspondance) — c'est elle qui
   identifie client + point de vente à la réception, jamais le nom de fichier
+- [ ] **Pour la consolidation du CA** : une **seconde adresse dédiée** sur la
+  même boîte (alias distinct), renseignée dans **adresse_email_consolidation**
+  du même point de vente, et vers laquelle LightSpeed envoie les rapports
+  **Tickets** et **Transactions**. C'est l'adresse destinataire qui décide du
+  traitement appliqué (conversion ou consolidation), jamais le nom du fichier
+- [ ] Le **site de consolidation** renseigné sur ce point de vente : sans lui,
+  les rapports reçus restent en attente et une alerte est émise
 - [ ] Le **tenant ID** M365 du client + la **boîte mail** à interroger
   renseignés page **Réglages** (l'app Azure AD et la boîte vivent toutes
   deux chez le client)

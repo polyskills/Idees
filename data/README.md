@@ -7,6 +7,7 @@ data/clients/<client_id>/history/index.jsonl          journal des conversions co
 data/clients/<client_id>/history/files/               fichiers source + générés archivés
 data/clients/<client_id>/consolidations/index.jsonl   journal des consolidations de CA
 data/clients/<client_id>/consolidations/files/        rapports source + classeurs archivés
+data/clients/<client_id>/consolidations/en_attente/   rapports reçus par mail, en attente de leur binôme
 ```
 
 Conversion comptable et consolidation ont chacune leur journal et leur dossier

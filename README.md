@@ -55,7 +55,10 @@ dur dans le code), propres à chaque client, persistées dans
 - **Points de vente** : liste des sites/points de vente du client. Chacun peut
   porter son propre **code journal** (ex. BAR → `VTBAR`, RESTAURANT → `VTRST`) ;
   laissé vide, c'est le code journal par défaut des paramètres généraux qui
-  s'applique.
+  s'applique. Chacun porte aussi ses adresses mail de réception — une pour les
+  **exports comptables**, une pour les **rapports de consolidation** — et son
+  **site de consolidation** (BAR / RESTAURANT), qui fixe les périodes de
+  service utilisées par la synthèse.
 - **Comptes de vente** : référentiel pur des comptes Pennylane (code +
   libellé), indépendant de LightSpeed — sert à proposer une liste de choix
   fiable (menu déroulant) plutôt que de la saisie libre dans les deux
@@ -119,8 +122,10 @@ automatique) — rien n'est utilisable tel quel sans ces étapes.
 ## Persistance et confidentialité
 
 Pas de base de données : chaque client a son dossier sous
-`data/clients/<client_id>/` (référentiel + fichiers archivés + journal
-JSON Lines des conversions). Ce dossier est exclu du dépôt git
+`data/clients/<client_id>/` (référentiel + fichiers archivés + journaux
+JSON Lines). Conversions comptables et consolidations y ont chacune leur
+journal et leur dossier de fichiers, jamais un stockage commun : aucune des
+deux ne peut faire perdre les données de l'autre. Ce dossier est exclu du dépôt git
 (`.gitignore`) car il contient des données comptables/financières réelles.
 Sur un serveur dédié, prévoir un disque persistant avec sauvegarde
 régulière pointant vers ce dossier — voir `data/README.md`.
@@ -156,14 +161,33 @@ python -m pytest tests/ -q
 Les tests couvrent le parsing d'exports LightSpeed reconstitués (dont un
 avec un nombre variable de colonnes de TVA, comme observé sur un vrai
 fichier client), la conservation du CA lors de la conversion, l'équilibrage
-débit/crédit (y compris avec report de la veille), et le blocage strict en
-cas de mapping manquant (catégorie, point de vente ou mode de paiement).
+débit/crédit (y compris avec report de la veille), le blocage strict en
+cas de mapping manquant (catégorie, point de vente ou mode de paiement),
+la consolidation du CA par période de service, et l'appariement par mail
+des deux rapports Tickets/Transactions — orchestration comprise, jouée avec
+un faux client Microsoft Graph (aucun réseau, aucun tenant Azure).
+
+**La suite est isolée des données réelles** (`tests/conftest.py`) : les
+chemins de stockage sont redirigés vers un dossier temporaire propre à
+chaque test. Un `pytest` lancé depuis une installation en service ne peut
+donc pas toucher aux référentiels clients ni au code d'accès —
+`tests/test_isolation_donnees.py` le vérifie explicitement. Ne jamais
+remplacer ce mécanisme par un nettoyage du vrai dossier `data/`.
 
 ## Limites connues à ce stade
 
-- **Aucune authentification** : tout utilisateur de l'app voit tous les
-  clients. À corriger avant tout accès par des personnes extérieures à
-  l'équipe interne.
+- **Authentification minimale** : un code d'accès unique et partagé (page
+  Réglages > Authentification), désactivé par défaut. Une fois entré, tout
+  utilisateur voit tous les clients — pas de comptes individuels ni de
+  cloisonnement par client. À renforcer avant tout accès par des personnes
+  extérieures à l'équipe interne.
+- **Périodes de service écrites en dur** : les grilles horaires de la
+  consolidation (BAR, RESTAURANT) vivent dans le code, pas dans le
+  référentiel. Elles ne varient donc pas d'un client à l'autre — à déplacer
+  dans la Table de correspondance le jour où ce sera nécessaire.
+- **Fetch mail jamais éprouvé en conditions réelles** : toute la logique est
+  couverte par les tests, mais aucun tenant client n'a encore été branché
+  (cf. `docs/fetch_mail.md`).
 - **Historique fichier, pas de base de données** : suffisant pour un usage
   ponctuel/petite équipe ; à faire évoluer vers une vraie base si le volume
   de conversions ou les besoins de recherche/reporting augmentent.
