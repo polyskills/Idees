@@ -23,6 +23,7 @@ from core.lightspeed_synthese import (
     SyntheseError,
     classer_fichiers,
     construire_synthese,
+    deviner_site,
     famille,
 )
 
@@ -206,3 +207,18 @@ def test_synthese_sans_fichier_refuse():
     _, transactions = _exports()
     with pytest.raises(SyntheseError, match="Aucun fichier"):
         construire_synthese([], transactions, "BAR")
+
+
+def test_deviner_site_depuis_le_nom_des_exports():
+    # Le nom porte la source, mais pas forcément le mot "bar" : ici la marque
+    # de l'établissement ("barutopic") suffit.
+    assert deviner_site(["anne-sophiepic-paris_barutopic_tickets_20260907.xls"]) == "BAR"
+    assert deviner_site(["client_restaurant_transactions_20260907.xls"]) == "RESTAURANT"
+
+
+def test_deviner_site_ne_tranche_pas_quand_cest_ambigu():
+    # Deux sites évoqués, ou aucun : mieux vaut ne rien proposer qu'imposer un
+    # site arbitraire — c'est le choix à l'écran qui détermine le calcul.
+    assert deviner_site(["bar_tickets.xls", "restaurant_tickets.xls"]) is None
+    assert deviner_site(["export_20260907.xls"]) is None
+    assert deviner_site([]) is None

@@ -184,6 +184,31 @@ def classer_fichiers(noms: list[str]) -> tuple[list[str], list[str], list[str]]:
     return tickets, transactions, inconnus
 
 
+# Mots-clés permettant de reconnaître le site dans le nom des exports : le
+# nom de fichier porte la source ("..._barutopic_tickets_..."), mais pas
+# toujours le mot "bar" — il peut se limiter à la marque de l'établissement.
+# Même principe que MOTS_CLES_BAR page Convertisseur.
+MOTS_CLES_SITE = {
+    "BAR": ("bar", "utopic"),
+    "RESTAURANT": ("restaurant", "aspp"),
+}
+
+
+def deviner_site(noms: list[str]) -> str | None:
+    """Site suggéré d'après le nom des fichiers déposés, ou None si aucun
+    indice ou si plusieurs sites sont évoqués — mieux vaut ne rien proposer
+    qu'imposer un site arbitraire quand le nom est ambigu.
+
+    Ne sert qu'à pré-remplir le choix à l'écran : le site reste sélectionné
+    explicitement, et c'est cette valeur, jamais le nom de fichier, qui
+    détermine les périodes de service appliquées au calcul."""
+    trouves = {
+        site for site, mots in MOTS_CLES_SITE.items()
+        if any(mot in nom.lower() for nom in noms for mot in mots)
+    }
+    return trouves.pop() if len(trouves) == 1 else None
+
+
 def _lire(fichiers: list[tuple[str, bytes]], libelle: str, colonnes: list[str]) -> pd.DataFrame:
     """Concatène plusieurs exports du même rapport et dédoublonne par
     identifiant : permet de traiter un mois complet en déposant tous les

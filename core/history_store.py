@@ -10,13 +10,13 @@ Conservé pour chaque conversion :
 - la liste des avertissements et erreurs rencontrés
 - un statut de synthèse : OK / AVERTISSEMENT / ERREUR
 
-Deux natures de traitement partagent ce journal, distinguées par le champ
-"type" : la conversion comptable vers Pennylane (TYPE_CONVERSION) et la
-consolidation du CA par période de service (TYPE_CONSOLIDATION). Un seul
-mécanisme de stockage, de purge et de relecture pour les deux — mais deux
-vues séparées à l'écran, pour ne pas mélanger des résultats qui n'ont ni le
-même format de sortie ni la même finalité. Une entrée sans "type" vient
-d'une version antérieure à la consolidation : c'est une conversion.
+Deux natures de traitement sont archivées, chacune dans SON journal et SON
+dossier de fichiers (cf. core.client_store) : la conversion comptable vers
+Pennylane sous history/, la consolidation du CA par période de service sous
+consolidations/. Elles partagent la mécanique — nommage horodaté, écriture
+append-only, plafond et purge — jamais le stockage : ni l'une ni l'autre ne
+peut faire disparaître ou faire remonter les données de sa voisine, que ce
+soit par une purge, une relecture ou un filtre oublié.
 """
 from __future__ import annotations
 
@@ -26,7 +26,12 @@ import os
 import re
 import uuid
 
-from core.client_store import client_history_files_dir, client_history_index_path
+from core.client_store import (
+    client_consolidation_files_dir,
+    client_consolidation_index_path,
+    client_history_files_dir,
+    client_history_index_path,
+)
 from core.converter import ConversionResult
 
 # Nombre maximum de conversions conservées par client (toutes indépendantes
@@ -37,9 +42,9 @@ from core.converter import ConversionResult
 # export comptable du client).
 MAX_HISTORIQUE_CONVERSIONS = 45
 
-# Nature du traitement archivé. La purge s'applique séparément à chacune :
-# une période chargée en consolidations ne doit pas évincer l'historique des
-# conversions comptables, et réciproquement.
+# Nature du traitement, portée par chaque entrée pour qu'un journal reste
+# lisible et auditable isolément. Ce n'est PAS un filtre : les deux natures ne
+# partagent aucun fichier, la séparation vient du stockage (cf. client_store).
 TYPE_CONVERSION = "conversion"
 TYPE_CONSOLIDATION = "consolidation"
 
@@ -109,34 +114,31 @@ def record_conversion(
         "destinataires_email": list(destinataires_email or []),
     }
 
-    _ajouter_au_journal(client_id, entree)
+    _ajouter_au_journal(client_history_index_path(client_id), entree)
     return entree
 
 
-def _ajouter_au_journal(client_id: str, entree: dict) -> None:
-    index_path = client_history_index_path(client_id)
+def _ajouter_au_journal(index_path: str, entree: dict) -> None:
+    """Écriture append-only dans UN journal donné, suivie de sa purge. La
+    mécanique est partagée par les conversions et les consolidations ; le
+    journal, lui, ne l'est jamais (cf. docstring du module)."""
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entree, ensure_ascii=False) + "\n")
-    _purger_historique(client_id)
+    _purger_journal(index_path)
 
 
-def _purger_historique(client_id: str) -> None:
+def _purger_journal(index_path: str) -> None:
     """Ne conserve que les MAX_HISTORIQUE_CONVERSIONS entrées les plus
-    récentes DE CHAQUE TYPE (indépendamment du point de vente) : réécrit le
-    journal sans les plus anciennes et supprime leurs fichiers source/générés
-    associés, pour ne pas accumuler indéfiniment sur un disque non dimensionné
-    pour ça.
+    récentes de CE journal : réécrit le fichier sans les plus anciennes et
+    supprime leurs fichiers source/générés associés, pour ne pas accumuler
+    indéfiniment sur un disque non dimensionné pour ça.
 
-    Le plafond s'applique type par type, et non au journal entier : sinon une
-    série de consolidations ferait disparaître l'historique des conversions
-    comptables, alors que les deux répondent à des besoins différents."""
-    entries = list_history(client_id)  # déjà trié par horodatage décroissant
-    conservees, a_purger = [], []
-    for type_traitement in {_type_de(e) for e in entries}:
-        du_type = [e for e in entries if _type_de(e) == type_traitement]
-        conservees += du_type[:MAX_HISTORIQUE_CONVERSIONS]
-        a_purger += du_type[MAX_HISTORIQUE_CONVERSIONS:]
+    Chaque journal ayant son plafond et ses propres fichiers, une série de
+    consolidations ne peut pas évincer l'historique des conversions - la
+    séparation des stockages suffit, sans arbitrage à écrire."""
+    entries = _lire_journal(index_path)  # déjà trié par horodatage décroissant
+    a_purger = entries[MAX_HISTORIQUE_CONVERSIONS:]
     if not a_purger:
         return
 
@@ -150,27 +152,14 @@ def _purger_historique(client_id: str) -> None:
             if chemin and os.path.exists(chemin):
                 os.remove(chemin)
 
-    conservees.sort(key=lambda e: e.get("horodatage", ""), reverse=True)
-    index_path = client_history_index_path(client_id)
     with open(index_path, "w", encoding="utf-8") as f:
         # Réécrit du plus ancien au plus récent (ordre naturel d'un journal
-        # append-only), même si `conservees` était trié à l'envers pour l'affichage.
-        for e in reversed(conservees):
+        # append-only), même si `entries` était trié à l'envers pour l'affichage.
+        for e in reversed(entries[:MAX_HISTORIQUE_CONVERSIONS]):
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
 
 
-def _type_de(entree: dict) -> str:
-    """Une entrée écrite avant l'arrivée de la consolidation n'a pas de champ
-    "type" : c'est une conversion. Évite toute migration du journal."""
-    return entree.get("type") or TYPE_CONVERSION
-
-
-def list_history(client_id: str, type_traitement: str | None = None) -> list[dict]:
-    """Journal du client, du plus récent au plus ancien. `type_traitement`
-    restreint à une nature de traitement (TYPE_CONVERSION /
-    TYPE_CONSOLIDATION) — sans lui, tout est renvoyé, ce dont a besoin la
-    purge."""
-    index_path = client_history_index_path(client_id)
+def _lire_journal(index_path: str) -> list[dict]:
     if not os.path.exists(index_path):
         return []
     entries = []
@@ -183,10 +172,21 @@ def list_history(client_id: str, type_traitement: str | None = None) -> list[dic
                 entries.append(json.loads(line))
             except json.JSONDecodeError:
                 continue  # ligne corrompue ignorée plutôt que de faire échouer tout l'historique
-    if type_traitement is not None:
-        entries = [e for e in entries if _type_de(e) == type_traitement]
     entries.sort(key=lambda e: e.get("horodatage", ""), reverse=True)
     return entries
+
+
+def list_history(client_id: str) -> list[dict]:
+    """Conversions comptables du client, de la plus récente à la plus ancienne."""
+    return _lire_journal(client_history_index_path(client_id))
+
+
+def list_consolidations(client_id: str) -> list[dict]:
+    """Consolidations de CA du client, de la plus récente à la plus ancienne.
+    Journal distinct de celui des conversions : les deux listes ne peuvent pas
+    se contaminer."""
+    return _lire_journal(client_consolidation_index_path(client_id))
+
 
 
 def record_consolidation(
@@ -195,15 +195,16 @@ def record_consolidation(
     sources: list[tuple[str, bytes]],
     horodatage: str,
 ) -> dict:
-    """Archive une consolidation (cf. core.lightspeed_synthese) dans le même
-    journal que les conversions, sous le type TYPE_CONSOLIDATION.
+    """Archive une consolidation (cf. core.lightspeed_synthese) dans le
+    journal et le dossier de fichiers QUI LUI SONT PROPRES
+    (data/clients/<id>/consolidations/), jamais dans ceux des conversions.
 
-    Deux différences avec une conversion, qui expliquent que ce ne soit pas la
-    même fonction : la consolidation part de PLUSIEURS fichiers source (les
-    rapports Tickets et Transactions, éventuellement sur plusieurs jours) et
-    produit un classeur .xlsx, non un CSV. Le reste — nommage horodaté des
-    fichiers, écriture append-only, purge — est strictement partagé."""
-    files_dir = client_history_files_dir(client_id)
+    Deux natures de données distinctes : sources différentes (deux rapports
+    d'exploitation au lieu d'un export comptable), destination différente (un
+    classeur d'analyse au lieu d'une écriture Pennylane), finalité différente.
+    Elles ne partagent que la mécanique — nommage horodaté, écriture
+    append-only, purge — pas le stockage."""
+    files_dir = client_consolidation_files_dir(client_id)
     os.makedirs(files_dir, exist_ok=True)
 
     conso_id = uuid.uuid4().hex[:12]
@@ -257,7 +258,7 @@ def record_consolidation(
         "destinataires_email": [],
     }
 
-    _ajouter_au_journal(client_id, entree)
+    _ajouter_au_journal(client_consolidation_index_path(client_id), entree)
     return entree
 
 

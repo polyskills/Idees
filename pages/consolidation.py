@@ -24,6 +24,7 @@ from core.lightspeed_synthese import (
     SyntheseError,
     classer_fichiers,
     construire_synthese,
+    deviner_site,
 )
 from core.timezone import now_local
 from core.ui_common import select_client
@@ -87,12 +88,20 @@ if en_double:
         + ", ".join(f"**{n}**" for n in en_double)
     )
 
+# Le nom des exports porte la source ("..._barutopic_tickets_...") : on s'en
+# sert pour pré-sélectionner le site, sans jamais décider à la place de
+# l'utilisateur — c'est la valeur choisie ici, et elle seule, qui détermine
+# les périodes de service appliquées au calcul.
+site_suggere = deviner_site(noms)
 site = st.selectbox(
     "Site (détermine les périodes de service)",
     options=list(SITES),
+    index=list(SITES).index(site_suggere) if site_suggere else 0,
     help="Les plages horaires de chaque période dépendent du site : "
     + " · ".join(f"{s} : {', '.join(p for p, *_ in SITES[s]['periodes'])}" for s in SITES),
 )
+if site_suggere:
+    st.caption("Site déduit du nom des fichiers déposés — à corriger si besoin.")
 
 pret = bool(choix_tickets) and bool(choix_transactions) and not en_double
 if not pret and not en_double:

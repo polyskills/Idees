@@ -13,7 +13,6 @@ import streamlit as st
 
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
-    TYPE_CONVERSION,
     echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
     list_history,
@@ -33,11 +32,10 @@ st.caption(
 if client_id is None:
     st.stop()
 
-# Restreint aux conversions comptables : les consolidations partagent le même
-# journal (cf. core.history_store) mais ont leur propre page, pour ne pas
-# mélanger deux traitements qui n'ont ni le même format de sortie ni la même
-# finalité.
-entries = list_history(client_id, TYPE_CONVERSION)
+# Conversions comptables uniquement : les consolidations ont leur propre
+# journal, leur propre dossier de fichiers et leur propre page (cf.
+# core.history_store) - rien à filtrer ici.
+entries = list_history(client_id)
 
 if not entries:
     st.info("Aucune conversion enregistrée pour ce client pour l'instant.")

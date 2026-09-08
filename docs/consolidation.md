@@ -66,8 +66,16 @@ Le site choisi à l'écran détermine les plages horaires :
 5. Contrôler l'indicateur **« Contrôle transactions / tickets »** avant
    d'exploiter le classeur (voir ci-dessous), puis télécharger.
 
+Le site est **pré-sélectionné d'après le nom des fichiers** quand celui-ci le
+permet (`..._barutopic_...` → BAR) ; il reste corrigeable, et c'est la valeur
+affichée — jamais le nom de fichier — qui détermine le calcul.
+
 Chaque consolidation est archivée automatiquement, avec ses rapports source et
-le classeur produit, dans **Historique consolidations**.
+le classeur produit, dans **Historique consolidations**. Ce stockage est
+entièrement séparé de celui des conversions comptables
+(`data/clients/<id>/consolidations/` contre `data/clients/<id>/history/`) :
+chacun a son journal, son plafond de conservation et sa purge. Aucun des deux
+traitements ne peut faire perdre les données de l'autre.
 
 ## Le contrôle qui compte
 

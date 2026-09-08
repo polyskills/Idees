@@ -2,9 +2,16 @@
 Registre des clients (mode multi-client / SaaS interne).
 
 Chaque client dispose de son propre espace isolé sous data/clients/<id>/ :
-- mappings.json      : ses tables de correspondance (voir mapping_store.py)
-- history/index.jsonl : journal append-only de toutes ses conversions
-- history/files/      : fichiers source et générés conservés en historique
+- mappings.json               : ses tables de correspondance (voir mapping_store.py)
+- history/index.jsonl         : journal append-only de ses conversions comptables
+- history/files/              : fichiers source et générés de ces conversions
+- consolidations/index.jsonl  : journal append-only de ses consolidations de CA
+- consolidations/files/       : rapports source et classeurs de ces consolidations
+
+Conversion comptable et consolidation sont deux besoins distincts : elles ont
+donc chacune leur journal et leur dossier de fichiers, jamais un stockage
+commun. Aucune des deux ne peut faire perdre les données de l'autre - ni par
+purge, ni par relecture, ni par erreur de filtrage.
 
 Aucune authentification n'est mise en place à ce stade (usage interne,
 équipe restreinte) : la sélection du client se fait via un simple menu en
@@ -81,9 +88,9 @@ def rename_client(client_id: str, nouveau_nom: str) -> None:
 
 def delete_client(client_id: str) -> None:
     """Supprime définitivement un client : sa fiche (index.json) ET tout son
-    espace disque (référentiel, historique des conversions, fichiers
-    archivés). Irréversible - à protéger d'une confirmation explicite côté
-    interface avant tout appel."""
+    espace disque (référentiel, historique des conversions, historique des
+    consolidations, fichiers archivés). Irréversible - à protéger d'une
+    confirmation explicite côté interface avant tout appel."""
     clients = [c for c in list_clients() if c["id"] != client_id]
     with open(CLIENTS_INDEX, "w", encoding="utf-8") as f:
         json.dump(clients, f, ensure_ascii=False, indent=2)
@@ -164,3 +171,14 @@ def client_history_index_path(client_id: str) -> str:
 
 def client_history_files_dir(client_id: str) -> str:
     return os.path.join(client_dir(client_id), "history", "files")
+
+
+# Consolidations : mêmes conventions, arborescence séparée (cf. docstring du
+# module). delete_client() supprime l'espace complet du client, ces dossiers
+# sont donc couverts sans traitement particulier.
+def client_consolidation_index_path(client_id: str) -> str:
+    return os.path.join(client_dir(client_id), "consolidations", "index.jsonl")
+
+
+def client_consolidation_files_dir(client_id: str) -> str:
+    return os.path.join(client_dir(client_id), "consolidations", "files")

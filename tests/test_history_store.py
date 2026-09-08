@@ -10,13 +10,12 @@ import pytest
 
 from core.client_store import CLIENTS_DIR, create_client
 from core.converter import ConversionResult
+from core.client_store import client_consolidation_index_path, client_history_index_path
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
-    TYPE_CONSOLIDATION,
-    TYPE_CONVERSION,
-    client_history_index_path,
     echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
+    list_consolidations,
     list_history,
     record_consolidation,
     record_conversion,
@@ -132,11 +131,12 @@ def test_echecs_apres_derniere_reussite_sans_aucune_reussite():
     assert len(echecs_apres_derniere_reussite(entries)) == 1
 
 
-# --- Cohabitation conversions / consolidations dans le même journal --------
+# --- Étanchéité entre conversions et consolidations -----------------------
 
 
-def _synthese(site="BAR", ecart=0.0, anomalies=None) -> SyntheseResult:
+def _synthese(site="BAR", ecart=0.0, anomalies=None):
     import datetime as dt
+    from core.lightspeed_synthese import SyntheseResult
     res = SyntheseResult(site=site, classeur=b"xlsx")
     res.jours = [dt.date(2026, 9, 7)]
     res.nb_tickets, res.nb_lignes = 23, 187
@@ -155,40 +155,50 @@ def _record_conso(client_id, n, site="BAR"):
         )
 
 
-def test_conversion_et_consolidation_sont_distinguees():
-    client = create_client("Test Types")
+def test_deux_journaux_distincts_sur_le_disque():
+    client = create_client("Test Etancheite")
     _record(client["id"], 3)
     _record_conso(client["id"], 2)
 
-    assert len(list_history(client["id"])) == 5                       # journal complet
-    assert len(list_history(client["id"], TYPE_CONVERSION)) == 3
-    assert len(list_history(client["id"], TYPE_CONSOLIDATION)) == 2
-    assert {e["type"] for e in list_history(client["id"], TYPE_CONSOLIDATION)} == {TYPE_CONSOLIDATION}
+    journal_conv = client_history_index_path(client["id"])
+    journal_conso = client_consolidation_index_path(client["id"])
+    assert journal_conv != journal_conso
+    assert os.path.exists(journal_conv) and os.path.exists(journal_conso)
+    # Aucun des deux fichiers ne contient d'entrée de l'autre nature
+    assert "consolidation" not in open(journal_conv, encoding="utf-8").read()
+    assert '"type": "conversion"' not in open(journal_conso, encoding="utf-8").read()
 
 
-def test_entree_sans_type_est_traitee_comme_une_conversion():
-    # Journal écrit par une version antérieure à la consolidation : aucune
-    # migration ne doit être nécessaire pour que la page Historique le montre.
-    client = create_client("Test Ancien Journal")
-    _record(client["id"], 1)
-    chemin = client_history_index_path(client["id"])
-    contenu = open(chemin, encoding="utf-8").read().replace('"type": "conversion", ', "")
-    open(chemin, "w", encoding="utf-8").write(contenu)
+def test_chaque_liste_ne_renvoie_que_sa_propre_nature():
+    client = create_client("Test Listes")
+    _record(client["id"], 3)
+    _record_conso(client["id"], 2)
 
-    entrees = list_history(client["id"], TYPE_CONVERSION)
-    assert len(entrees) == 1
-    assert "type" not in entrees[0]
+    assert len(list_history(client["id"])) == 3
+    assert len(list_consolidations(client["id"])) == 2
+    assert all(e["type"] == "conversion" for e in list_history(client["id"]))
+    assert all(e["type"] == "consolidation" for e in list_consolidations(client["id"]))
 
 
-def test_la_purge_sapplique_type_par_type():
-    # Une série de consolidations ne doit pas évincer l'historique des
-    # conversions comptables : le plafond vaut pour chaque type séparément.
-    client = create_client("Test Purge Par Type")
+def test_une_serie_de_consolidations_neviction_pas_les_conversions():
+    # Le plafond vaut par journal : saturer les consolidations ne doit rien
+    # retirer à l'historique comptable, et réciproquement.
+    client = create_client("Test Purges Independantes")
     _record(client["id"], 5)
     _record_conso(client["id"], MAX_HISTORIQUE_CONVERSIONS + 10)
 
-    assert len(list_history(client["id"], TYPE_CONVERSION)) == 5
-    assert len(list_history(client["id"], TYPE_CONSOLIDATION)) == MAX_HISTORIQUE_CONVERSIONS
+    assert len(list_history(client["id"])) == 5
+    assert len(list_consolidations(client["id"])) == MAX_HISTORIQUE_CONVERSIONS
+
+
+def test_les_fichiers_archives_vivent_dans_des_dossiers_separes():
+    client = create_client("Test Dossiers")
+    conv = record_conversion(client["id"], _res(), source_bytes=b"s", csv_bytes=b"c",
+                             horodatage="2026-09-08 10:00:00")
+    conso = record_consolidation(client["id"], _synthese(), sources=[("tickets.xls", b"t")],
+                                 horodatage="2026-09-08 11:00:00")
+    assert "/history/files/" in conv["fichier_genere_chemin"]
+    assert "/consolidations/files/" in conso["fichier_genere_chemin"]
 
 
 def test_consolidation_archive_tous_ses_rapports_source():
@@ -203,8 +213,8 @@ def test_consolidation_archive_tous_ses_rapports_source():
     assert len(chemins) == 2
     assert all(os.path.exists(c) for c in chemins)
     assert os.path.exists(entree["fichier_genere_chemin"])
-    # Le champ au singulier reste renseigné : le format d'entrée des
-    # conversions doit rester lisible par du code qui ignore la consolidation.
+    # Le champ au singulier reste renseigné : même forme d'entrée que pour une
+    # conversion, ce qui garde la mécanique de purge commune aux deux journaux.
     assert entree["fichier_source_chemin"] == chemins[0]
 
 

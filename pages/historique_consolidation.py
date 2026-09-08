@@ -2,10 +2,10 @@
 Historique des consolidations du client sélectionné : rapports source
 conservés, classeur de synthèse généré, indicateurs et anomalies relevées.
 
-Séparé de l'historique des conversions comptables — même mécanisme de
-stockage et de purge (core.history_store, plafond appliqué type par type),
-mais deux vues distinctes : les deux traitements n'ont ni le même format de
-sortie ni la même finalité.
+Stockage entièrement séparé de celui des conversions comptables : journal et
+dossier de fichiers propres (data/clients/<id>/consolidations/), plafond et
+purge propres. Les deux traitements ne partagent que la mécanique, jamais les
+données — aucun des deux ne peut faire perdre celles de l'autre.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ import os
 
 import streamlit as st
 
-from core.history_store import MAX_HISTORIQUE_CONVERSIONS, TYPE_CONSOLIDATION, list_history
+from core.history_store import MAX_HISTORIQUE_CONVERSIONS, list_consolidations
 from core.ui_common import select_client
 
 client_id = select_client()
@@ -27,7 +27,7 @@ st.caption(
 if client_id is None:
     st.stop()
 
-entries = list_history(client_id, TYPE_CONSOLIDATION)
+entries = list_consolidations(client_id)
 
 if not entries:
     st.info(
