@@ -1,6 +1,6 @@
 # Consolidation du CA par période de service
 
-Croise les **deux rapports Lightspeed Back Office** d'une même période — le
+Croise les **deux rapports Lightspeed Back Office** (`.xls`, `.xlsx` ou `.csv`) d'une même période — le
 rapport **Tickets** et le rapport **Transactions** — pour produire un classeur
 Excel de synthèse de l'exploitation.
 

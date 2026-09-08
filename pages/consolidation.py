@@ -65,8 +65,8 @@ with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
 st.subheader("1. Importer les rapports Tickets et Transactions")
 styliser_zone_de_depot()
 uploaded_files = st.file_uploader(
-    "Rapports Lightspeed Tickets et Transactions (.xls / .xlsx)",
-    type=["xls", "xlsx"],
+    "Rapports Lightspeed Tickets et Transactions (.xls / .xlsx / .csv)",
+    type=["xls", "xlsx", "csv"],
     accept_multiple_files=True,
     key="conso_uploader",
 )

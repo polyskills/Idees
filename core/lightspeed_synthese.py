@@ -30,6 +30,7 @@ Règles métier (inchangées) :
 """
 from __future__ import annotations
 
+import csv
 import io
 import re
 from dataclasses import dataclass, field
@@ -91,6 +92,13 @@ COLONNES_TICKETS = ["Identifier", "Date", "OpenDate", "Account", "AccountName", 
                     "PreTax", "Couverts", "Type", "Annulée", "Profil"]
 COLONNES_TRANSACTIONS = ["Identifier", "Account", "Type", "Qty", "FinalPrice", "PreTax",
                          "TaxAmount", "TaxName", "Item", "Group"]
+
+# Colonnes sur lesquelles portent les calculs. Lues depuis un .xls/.xlsx elles
+# arrivent déjà typées ; depuis un .csv elles arrivent en texte, avec une
+# virgule décimale si l'export a été fait en locale française — d'où la
+# conversion explicite, sans laquelle les totaux tomberaient tous à zéro.
+COLONNES_NUMERIQUES_TICKETS = ["Total", "PreTax", "Couverts"]
+COLONNES_NUMERIQUES_TRANSACTIONS = ["Qty", "FinalPrice", "PreTax", "TaxAmount"]
 
 
 @dataclass
@@ -209,7 +217,58 @@ def deviner_site(noms: list[str]) -> str | None:
     return trouves.pop() if len(trouves) == 1 else None
 
 
-def _lire(fichiers: list[tuple[str, bytes]], libelle: str, colonnes: list[str]) -> pd.DataFrame:
+def _decoder(contenu: bytes, nom: str) -> str:
+    """Même cascade d'encodages que le parser de la conversion comptable : les
+    exports Lightspeed sortent tantôt en UTF-8 avec BOM, tantôt en cp1252."""
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            return contenu.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    raise SyntheseError(f"« {nom} » : encodage du CSV non reconnu.")
+
+
+def _nombre(v):
+    """Texte d'un CSV -> nombre, en tolérant la virgule décimale et les espaces
+    de milliers (y compris insécables). Une valeur vide vaut 0, comme une
+    cellule vide d'un classeur. Reprend la logique de core.lightspeed_parser."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return 0.0
+    if isinstance(v, str):
+        v = v.replace("\xa0", "").replace(" ", "").replace(",", ".")
+        if v in ("", "-"):
+            return 0.0
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if pd.isna(f) else f
+
+
+def _lire_un(nom: str, contenu: bytes, libelle: str, colonnes_numeriques: list[str]) -> pd.DataFrame:
+    """Un export, quel que soit son format. Le chemin .xls/.xlsx est laissé
+    strictement inchangé : c'est celui vérifié contre le classeur de référence,
+    et pandas y type déjà les colonnes."""
+    if not nom.lower().endswith(".csv"):
+        moteur = "xlrd" if nom.lower().endswith(".xls") else None
+        return pd.read_excel(io.BytesIO(contenu), engine=moteur)
+
+    texte = _decoder(contenu, nom)
+    try:
+        dialecte = csv.Sniffer().sniff("\n".join(texte.splitlines()[:5]), delimiters=";,\t")
+        sep = dialecte.delimiter
+    except csv.Error:
+        premiere = texte.split("\n", 1)[0]
+        sep = ";" if premiere.count(";") >= premiere.count(",") else ","
+    df = pd.read_csv(io.StringIO(texte), sep=sep, dtype=str)
+    for colonne in colonnes_numeriques:
+        if colonne in df.columns:
+            df[colonne] = df[colonne].map(_nombre)
+    return df
+
+
+def _lire(fichiers: list[tuple[str, bytes]], libelle: str, colonnes: list[str],
+          colonnes_numeriques: list[str]) -> pd.DataFrame:
     """Concatène plusieurs exports du même rapport et dédoublonne par
     identifiant : permet de traiter un mois complet en déposant tous les
     fichiers d'un coup, sans compter deux fois un jour présent dans deux
@@ -218,9 +277,10 @@ def _lire(fichiers: list[tuple[str, bytes]], libelle: str, colonnes: list[str]) 
         raise SyntheseError(f"Aucun fichier « {libelle} » fourni.")
     frames = []
     for nom, contenu in fichiers:
-        moteur = "xlrd" if nom.lower().endswith(".xls") else None
         try:
-            frames.append(pd.read_excel(io.BytesIO(contenu), engine=moteur))
+            frames.append(_lire_un(nom, contenu, libelle, colonnes_numeriques))
+        except SyntheseError:
+            raise
         except Exception as e:
             raise SyntheseError(f"« {nom} » illisible comme export Lightspeed ({libelle}) : {e}") from e
     df = pd.concat(frames, ignore_index=True)
@@ -238,8 +298,8 @@ def charger(tickets: list[tuple[str, bytes]], transactions: list[tuple[str, byte
     """Lit les deux rapports et les croise. Renvoie (tickets, transactions,
     lignes fusionnées) — la fusion porte la période du TICKET sur chaque ligne
     de transaction, c'est elle qui alimente les totaux par période."""
-    t = _lire(tickets, "Tickets", COLONNES_TICKETS)
-    x = _lire(transactions, "Transactions", COLONNES_TRANSACTIONS)
+    t = _lire(tickets, "Tickets", COLONNES_TICKETS, COLONNES_NUMERIQUES_TICKETS)
+    x = _lire(transactions, "Transactions", COLONNES_TRANSACTIONS, COLONNES_NUMERIQUES_TRANSACTIONS)
     t["Date"] = pd.to_datetime(t["Date"], format="%d/%m/%y %H:%M")
     t["OpenDate"] = pd.to_datetime(t["OpenDate"], format="%d/%m/%y %H:%M")
     t["Jour"] = (t["OpenDate"] - DEBUT_JOURNEE).dt.date

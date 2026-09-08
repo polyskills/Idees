@@ -8,6 +8,7 @@ un export Lightspeed contient le détail des ventes d'un client identifiable.
 
 Lancer avec : python -m pytest tests/ -q
 """
+import csv
 import io
 import os
 import sys
@@ -87,6 +88,38 @@ def _contenu(classeur: bytes) -> dict:
     deux classeurs sans dépendre de leur horodatage interne."""
     wb = openpyxl.load_workbook(io.BytesIO(classeur))
     return {s: [[c.value for c in r] for r in wb[s].iter_rows()] for s in wb.sheetnames}
+
+
+def _csv(entetes: list[str], lignes: list[list], sep=";", decimal=",") -> bytes:
+    """Export CSV à la française : séparateur point-virgule et virgule
+    décimale, encodé en cp1252 — la combinaison que produit un Lightspeed
+    configuré en locale française, et celle qui casse une lecture naïve."""
+    def cellule(v):
+        if isinstance(v, float):
+            return str(v).replace(".", decimal)
+        return "" if v is None else str(v)
+
+    # Écrit avec le module csv, donc avec les guillemets là où il en faut :
+    # AccountName vaut "BAR, Table 5" et casserait un fichier à séparateur
+    # virgule si on se contentait de concaténer.
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=sep, lineterminator="\r\n")
+    writer.writerow(entetes)
+    for l in lignes:
+        writer.writerow([cellule(v) for v in l])
+    return buf.getvalue().encode("cp1252")
+
+
+def _exports_csv():
+    """Mêmes données que _exports(), au format CSV."""
+    lt = [[i, d, a, an, float(tot), float(pre), cv, ty, ann, pr, od]
+          for i, d, a, an, tot, pre, cv, ty, ann, pr, od in TICKETS]
+    lx = [[i, a, ty, q, float(fp) / q if q else float(fp), float(fp), "SKU", it, gr, "TVA", 0.1, float(pre), float(tax)]
+          for i, a, ty, q, fp, it, gr, pre, tax in TRANSACTIONS]
+    return (
+        [("client_bar_tickets_20260907.csv", _csv(COLS_TICKETS, lt))],
+        [("client_bar_transactions_20260907.csv", _csv(COLS_TRANSACTIONS, lx))],
+    )
 
 
 def test_famille_prefixe_puis_table_explicite():
@@ -222,3 +255,39 @@ def test_deviner_site_ne_tranche_pas_quand_cest_ambigu():
     assert deviner_site(["bar_tickets.xls", "restaurant_tickets.xls"]) is None
     assert deviner_site(["export_20260907.xls"]) is None
     assert deviner_site([]) is None
+
+
+def test_synthese_lit_aussi_les_exports_csv():
+    # Même contenu en .xlsx et en .csv français (point-virgule, virgule
+    # décimale, cp1252) : les deux doivent donner exactement le même classeur.
+    res_xlsx = construire_synthese(*_exports(), "BAR")
+    res_csv = construire_synthese(*_exports_csv(), "BAR")
+
+    assert res_csv.ca_ttc == res_xlsx.ca_ttc == 180.0
+    assert res_csv.ca_ht == res_xlsx.ca_ht == 157.0
+    assert res_csv.couverts == res_xlsx.couverts == 5
+    assert res_csv.ecart_controle == 0.0
+    assert _contenu(res_csv.classeur) == _contenu(res_xlsx.classeur)
+
+
+def test_synthese_csv_a_separateur_virgule():
+    # Séparateur détecté, pas supposé : un export en locale anglaise passe aussi.
+    lt = [[i, d, a, an, tot, pre, cv, ty, ann, pr, od]
+          for i, d, a, an, tot, pre, cv, ty, ann, pr, od in TICKETS]
+    lx = [[i, a, ty, q, fp / q if q else fp, fp, "SKU", it, gr, "TVA", 0.1, pre, tax]
+          for i, a, ty, q, fp, it, gr, pre, tax in TRANSACTIONS]
+    tickets = [("bar_tickets.csv", _csv(COLS_TICKETS, lt, sep=",", decimal="."))]
+    transactions = [("bar_transactions.csv", _csv(COLS_TRANSACTIONS, lx, sep=",", decimal="."))]
+
+    res = construire_synthese(tickets, transactions, "BAR")
+    assert res.ca_ttc == 180.0
+    assert res.ecart_controle == 0.0
+
+
+def test_synthese_melange_xlsx_et_csv():
+    # Rien n'impose que les deux rapports aient le même format.
+    tickets_xlsx, _ = _exports()
+    _, transactions_csv = _exports_csv()
+    res = construire_synthese(tickets_xlsx, transactions_csv, "BAR")
+    assert res.ca_ttc == 180.0
+    assert res.ecart_controle == 0.0
