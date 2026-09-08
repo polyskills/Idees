@@ -154,16 +154,69 @@ urgent sans passer par quelqu'un ayant un accès serveur. Repose sur
 `Restart=always` déjà posé par `install-service.sh` sur l'unité systemd :
 l'app s'arrête simplement, systemd la relance seule.
 
-## Désinstaller le service
+## Désinstaller
+
+### Retirer les services, garder l'outil installé
+
+**Deux services peuvent coexister** : l'application (`lightspeed-pennylane`)
+et la moulinette de réception des exports par mail
+(`lightspeed-pennylane-fetchmail`). Le script n'en retire **qu'un à la fois** :
+lancez-le une fois par service, sinon le second continue de tourner.
 
 ```bash
 cd ~/Apps/Adaptools/LS2PL-Converter
 sudo ./deploy/linux/uninstall-service.sh
+sudo ./deploy/linux/uninstall-service.sh --service-name lightspeed-pennylane-fetchmail --no-firewall
 ```
 
-Arrête et supprime le service ainsi que la règle de pare-feu. Le code, les
-dépendances (`.venv`) et surtout **les données clients (`data/clients/`)
-sont conservés** — seule la couche "service" est retirée.
+`--no-firewall` sur la seconde ligne : la moulinette n'ouvre aucun port
+entrant, l'option évite de refermer celui de l'application si vous ne
+retirez QUE la moulinette. La ligne est sans effet si elle n'a jamais été
+installée.
+
+Le code, les dépendances (`.venv`) et surtout **les données clients
+(`data/clients/`) sont conservés** — seule la couche « service » est retirée.
+
+### Supprimer complètement l'outil de la machine
+
+**L'ordre compte** : les scripts de désinstallation vivent *dans* le dossier.
+Supprimer le dossier en premier laisse les services installés en fantôme,
+pointant vers un chemin qui n'existe plus (voir le rattrapage plus bas).
+
+```bash
+cd ~/Apps/Adaptools/LS2PL-Converter
+
+# 1. Sauvegarder les données comptables — irréversible ensuite
+tar czf ~/ls2pl-clients-$(date +%Y%m%d).tar.gz data/clients/
+
+# 2. Retirer les deux services
+sudo ./deploy/linux/uninstall-service.sh
+sudo ./deploy/linux/uninstall-service.sh --service-name lightspeed-pennylane-fetchmail --no-firewall
+
+# 3. Supprimer le dossier
+cd ~ && rm -rf ~/Apps/Adaptools/LS2PL-Converter
+```
+
+### Vérifier qu'il ne reste rien
+
+```bash
+systemctl list-unit-files | grep lightspeed    # ne doit rien afficher
+ls /etc/systemd/system/ | grep lightspeed      # ne doit rien afficher
+```
+
+Les identifiants Azure de la moulinette mail sont stockés **dans l'unité
+systemd elle-même** (`Environment=LSPENNYLANE_AZURE_CLIENT_SECRET=...`) :
+supprimer l'unité les supprime aussi, aucun secret ne subsiste ailleurs.
+
+### Rattrapage : le dossier a été supprimé avant les services
+
+```bash
+sudo systemctl disable --now lightspeed-pennylane lightspeed-pennylane-fetchmail
+sudo rm -f /etc/systemd/system/lightspeed-pennylane.service \
+           /etc/systemd/system/lightspeed-pennylane-fetchmail.service
+sudo systemctl daemon-reload
+sudo ufw delete allow 8501/tcp                 # si ufw est actif
+```
 
 ## Administration courante
 

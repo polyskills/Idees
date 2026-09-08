@@ -10,10 +10,14 @@
     cd C:\Apps\Adaptools\LS2PL-Converter
     .\deploy\windows\uninstall-service.ps1
     .\deploy\windows\uninstall-service.ps1 -Port 8080 -ServiceName "LSPennylaneProd"
+    .\deploy\windows\uninstall-service.ps1 -ServiceName "LightspeedPennylaneFetchMail" -NoFirewall
 #>
 param(
     [int]$Port = 8501,
-    [string]$ServiceName = "LightspeedPennylane"
+    [string]$ServiceName = "LightspeedPennylane",
+    # Le service de fetch mail n'ouvre aucun port entrant : le retirer ne doit
+    # PAS refermer celui de l'application, qui reste installée.
+    [switch]$NoFirewall
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,7 +44,7 @@ Write-Host "Arrêt et suppression du service '$ServiceName'..." -ForegroundColor
 & $NssmExe remove $ServiceName confirm 2>$null | Out-Null
 
 $ruleName = "LightSpeed-Pennylane ($Port)"
-if (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue) {
+if (-not $NoFirewall -and (Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue)) {
     Remove-NetFirewallRule -DisplayName $ruleName
     Write-Host "Règle de pare-feu supprimée."
 }

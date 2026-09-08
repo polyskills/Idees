@@ -156,16 +156,65 @@ urgent sans passer par quelqu'un ayant un accès serveur. Repose sur
 `KeepAlive` déjà posé par `install-service.sh` sur le LaunchDaemon : l'app
 s'arrête simplement, launchd la relance seule.
 
-## Désinstaller le service
+## Désinstaller
+
+### Retirer les services, garder l'outil installé
+
+**Deux LaunchDaemons peuvent coexister** : l'application
+(`com.polyskills.lightspeed-pennylane`) et la moulinette de réception des
+exports par mail (`com.polyskills.lightspeed-pennylane-fetchmail`). Le script
+n'en retire **qu'un à la fois** : lancez-le une fois par service, sinon le
+second continue de tourner.
 
 ```bash
 cd ~/Applications/Adaptools/LS2PL-Converter
 sudo ./deploy/macos/uninstall-service.sh
+sudo ./deploy/macos/uninstall-service.sh --service-name lightspeed-pennylane-fetchmail
 ```
 
-Arrête et supprime le LaunchDaemon. Le code, les dépendances (`.venv`) et
-surtout **les données clients (`data/clients/`) sont conservés** — seule la
-couche "service" est retirée.
+La seconde ligne est sans effet si la moulinette n'a jamais été installée.
+
+Le code, les dépendances (`.venv`) et surtout **les données clients
+(`data/clients/`) sont conservés** — seule la couche « service » est retirée.
+
+### Supprimer complètement l'outil de la machine
+
+**L'ordre compte** : les scripts de désinstallation vivent *dans* le dossier.
+Supprimer le dossier en premier laisse les LaunchDaemons chargés en fantôme,
+pointant vers un chemin qui n'existe plus (voir le rattrapage plus bas).
+
+```bash
+cd ~/Applications/Adaptools/LS2PL-Converter
+
+# 1. Sauvegarder les données comptables — irréversible ensuite
+tar czf ~/ls2pl-clients-$(date +%Y%m%d).tar.gz data/clients/
+
+# 2. Retirer les deux services
+sudo ./deploy/macos/uninstall-service.sh
+sudo ./deploy/macos/uninstall-service.sh --service-name lightspeed-pennylane-fetchmail
+
+# 3. Supprimer le dossier
+cd ~ && rm -rf ~/Applications/Adaptools/LS2PL-Converter
+```
+
+### Vérifier qu'il ne reste rien
+
+```bash
+sudo launchctl list | grep polyskills          # ne doit rien afficher
+ls /Library/LaunchDaemons/ | grep polyskills   # ne doit rien afficher
+```
+
+Les identifiants Azure de la moulinette mail sont stockés **dans le fichier
+plist du LaunchDaemon** : le supprimer les supprime aussi, aucun secret ne
+subsiste ailleurs.
+
+### Rattrapage : le dossier a été supprimé avant les services
+
+```bash
+sudo launchctl bootout system/com.polyskills.lightspeed-pennylane
+sudo launchctl bootout system/com.polyskills.lightspeed-pennylane-fetchmail
+sudo rm -f /Library/LaunchDaemons/com.polyskills.lightspeed-pennylane*.plist
+```
 
 ## Administration courante
 

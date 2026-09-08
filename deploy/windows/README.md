@@ -139,16 +139,82 @@ urgent sans passer par quelqu'un ayant un accès serveur. Repose sur le
 réglage `AppExit Default Restart` déjà posé par `install-service.ps1` :
 l'app s'arrête simplement, NSSM la relance seule.
 
-## Désinstaller le service
+## Désinstaller
+
+### Retirer les services, garder l'outil installé
+
+**Deux services peuvent coexister** : l'application (`LightspeedPennylane`) et
+la moulinette de réception des exports par mail
+(`LightspeedPennylaneFetchMail`). Le script n'en retire **qu'un à la fois** :
+lancez-le une fois par service, sinon le second continue de tourner.
 
 ```powershell
 cd C:\Apps\Adaptools\LS2PL-Converter
 .\deploy\windows\uninstall-service.ps1
+.\deploy\windows\uninstall-service.ps1 -ServiceName LightspeedPennylaneFetchMail -NoFirewall
 ```
 
-Arrête et supprime le service ainsi que la règle de pare-feu. Le code, les
-dépendances (`.venv`) et surtout **les données clients (`data\clients\`)
-sont conservés** — seule la couche "service" est retirée.
+`-NoFirewall` sur la seconde ligne : la moulinette n'ouvre aucun port
+entrant, le commutateur évite de refermer celui de l'application si vous ne
+retirez QUE la moulinette. La ligne est sans effet si elle n'a jamais été
+installée.
+
+Le code, les dépendances (`.venv`) et surtout **les données clients
+(`data\clients\`) sont conservés** — seule la couche « service » est retirée.
+
+### Supprimer complètement l'outil de la machine
+
+**L'ordre compte, plus encore qu'ailleurs** : le script de désinstallation a
+besoin de `deploy\windows\tools\nssm.exe`, qui vit *dans* le dossier et
+n'est pas versionné (téléchargé à l'installation). Supprimer le dossier en
+premier rend les services impossibles à retirer normalement — il faut alors
+passer par `sc.exe` (voir le rattrapage plus bas).
+
+```powershell
+cd C:\Apps\Adaptools\LS2PL-Converter
+
+# 1. Sauvegarder les données comptables — irréversible ensuite
+Copy-Item -Recurse data\clients "$env:USERPROFILE\ls2pl-clients-$(Get-Date -Format yyyyMMdd)"
+
+# 2. Retirer les deux services
+.\deploy\windows\uninstall-service.ps1
+.\deploy\windows\uninstall-service.ps1 -ServiceName LightspeedPennylaneFetchMail -NoFirewall
+
+# 3. Supprimer les identifiants Azure laissés au niveau machine (voir plus bas)
+[Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_ID", $null, "Machine")
+[Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_SECRET", $null, "Machine")
+
+# 4. Supprimer le dossier
+cd C:\ ; Remove-Item -Recurse -Force C:\Apps\Adaptools\LS2PL-Converter
+```
+
+L'étape 3 n'est pas optionnelle : contrairement à Linux et macOS, où les
+identifiants vivent dans l'unité systemd / le plist et disparaissent avec le
+service, Windows les stocke en **variables d'environnement « Machine »**.
+Elles survivent à la désinstallation et à la suppression du dossier — un
+secret Azure resterait lisible sur la machine.
+
+### Vérifier qu'il ne reste rien
+
+```powershell
+Get-Service Lightspeed*                                          # ne doit rien renvoyer
+Get-NetFirewallRule -DisplayName "LightSpeed-Pennylane*"          # ne doit rien renvoyer
+[Environment]::GetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_SECRET", "Machine")  # doit être vide
+```
+
+### Rattrapage : le dossier a été supprimé avant les services
+
+Sans `nssm.exe`, on passe par le gestionnaire de services Windows :
+
+```powershell
+sc.exe stop LightspeedPennylane
+sc.exe delete LightspeedPennylane
+sc.exe stop LightspeedPennylaneFetchMail
+sc.exe delete LightspeedPennylaneFetchMail
+Remove-NetFirewallRule -DisplayName "LightSpeed-Pennylane (8501)"
+```
+
+(Les `stop` échouent sans conséquence si les services sont déjà arrêtés.)
 
 ## Administration courante
 
