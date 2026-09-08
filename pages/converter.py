@@ -24,7 +24,7 @@ from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
 from core.mapping_store import find_code_journal, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
-from core.ui_common import select_client
+from core.ui_common import select_client, styliser_zone_de_depot
 
 
 # Mots-clés déclenchant la suggestion "BAR" : le nom du fichier LightSpeed ne
@@ -90,7 +90,8 @@ if client and client.get("email_tenant_id") and client.get("email_mailbox"):
             "(Réglages > Gestion Email), au lieu d'attendre le prochain passage du service "
             "automatique ou de lancer `email_poller.py` en ligne de commande. Les mails non lus "
             "avec pièce jointe sont traités exactement comme d'habitude (conversion, réponse, "
-            "alerte en cas d'échec) — voir la page **Historique** pour le résultat détaillé."
+            "alerte en cas d'échec) — voir la page **Historique** (sous Convertisseur) pour le "
+            "résultat détaillé."
         )
         if st.button("📧 Relever les mails maintenant"):
             from core.email_poller import _identifiants_azure, traiter_client
@@ -122,74 +123,12 @@ if client and client.get("email_tenant_id") and client.get("email_mailbox"):
                         pluriel = "s" if nb_recuperes != 1 else ""
                         st.success(
                             f"Cycle de relève terminé : {nb_recuperes} e-mail{pluriel} récupéré{pluriel}. "
-                            "Voir la page **Historique** pour le détail des conversions traitées."
+                            "Voir la page **Historique** (sous Convertisseur) pour le détail des conversions traitées."
                         )
 
-st.subheader("Importer le ou les exports LightSpeed")
+st.subheader("1. Importer le ou les exports LightSpeed")
 
-# Bloc de dépôt agrandi de 50% (plus facile à viser) et libellés traduits :
-# st.file_uploader ne propose ni paramètre de taille ni de traduction de ses
-# textes intégrés ("Upload", "200MB per file..."), ce qui impose un correctif
-# CSS (taille) + JS (traduction, rejouée à chaque rendu puisque Streamlit
-# reconstruit le DOM à chaque interaction).
-st.markdown(
-    """
-    <style>
-    div[data-testid="stFileUploaderDropzone"] {
-        min-height: 102px !important; /* 68px d'origine, +50% */
-        padding: 24px !important;
-    }
-    div[data-testid="stFileUploaderDropzone"] span[data-testid="stIconMaterial"] {
-        font-size: 1.5em !important;
-    }
-    div[data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] p {
-        font-size: 1.1rem !important;
-    }
-    div[data-testid="stFileUploaderDropzoneInstructions"] span {
-        font-size: 1.05rem !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-st.iframe(
-    r"""
-    <script>
-    const traductions = [
-        [/^Upload$/, "Parcourir les fichiers"],
-        [/^Browse files$/, "Parcourir les fichiers"],
-        [/^Drag and drop file(s)? here$/, "Glissez-déposez votre fichier ici"],
-        [/^(\d+)MB per file(.*)$/, "$1 Mo par fichier$2"],
-    ];
-
-    function traduireNoeud(node) {
-        if (node.nodeType === Node.TEXT_NODE) {
-            const original = node.textContent;
-            const cible = original.trim();
-            for (const [motif, remplacement] of traductions) {
-                if (motif.test(cible)) {
-                    const nouveau = original.replace(motif, remplacement);
-                    if (nouveau !== original) node.textContent = nouveau;
-                    return;
-                }
-            }
-        } else {
-            node.childNodes.forEach(traduireNoeud);
-        }
-    }
-
-    function traduireTout() {
-        traduireNoeud(window.parent.document.body);
-    }
-
-    new MutationObserver(traduireTout).observe(window.parent.document.body, {
-        childList: true, subtree: true, characterData: true,
-    });
-    traduireTout();
-    </script>
-    """,
-    height=1,
-)
+styliser_zone_de_depot()
 
 uploaded_files = st.file_uploader(
     "Fichier(s) export comptable LightSpeed (.xls / .xlsx / .csv)",
@@ -411,6 +350,9 @@ if uploaded_files:
 
             if not tous_ok:
                 st.info("Corrigez les erreurs listées ci-dessus (mapping manquant) avant de pouvoir télécharger le fichier.")
-            st.caption("📁 Cette tentative de conversion a été archivée dans l'historique de ce client (page « Historique »).")
+            st.caption(
+                "📁 Cette tentative de conversion a été archivée dans l'historique de ce client "
+                "(page « Historique », sous Convertisseur)."
+            )
 else:
     st.info("Déposez un ou plusieurs fichiers d'export LightSpeed pour démarrer.")

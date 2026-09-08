@@ -71,7 +71,7 @@ permet (`..._barutopic_...` → BAR) ; il reste corrigeable, et c'est la valeur
 affichée — jamais le nom de fichier — qui détermine le calcul.
 
 Chaque consolidation est archivée automatiquement, avec ses rapports source et
-le classeur produit, dans **Historique consolidations**. Ce stockage est
+le classeur produit, dans la page **Historique** rangée sous **Consolidation**. Ce stockage est
 entièrement séparé de celui des conversions comptables
 (`data/clients/<id>/consolidations/` contre `data/clients/<id>/history/`) :
 chacun a son journal, son plafond de conservation et sa purge. Aucun des deux

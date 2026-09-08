@@ -213,16 +213,26 @@ try:
 except Exception as e:
     st.sidebar.error(f"⚠️ Sélecteur de client indisponible : {e}")
 
+# Chaque historique est rangé directement sous le traitement qui l'alimente,
+# et décalé vers la droite : c'est une consultation de ce traitement, pas une
+# fonction de gestion à part. st.navigation ne connaît que des groupes plats -
+# le décalage vient donc du CSS ci-dessous, ciblé sur l'url_path de chaque
+# page, et de la flèche en tête de libellé, qui reste lisible même si le style
+# venait à ne pas s'appliquer.
 pages = {
-    "Conversion": [
+    "Traitements": [
         st.Page("pages/converter.py", title="Convertisseur", icon="🧾", default=True),
+        # url_path laissé par défaut ("historique") : les mails de notification
+        # construisent un lien direct vers cette page (cf. core.email_poller),
+        # le renommer casserait les liens déjà envoyés.
+        st.Page("pages/historique.py", title="↳ Historique", icon="🕓"),
         st.Page("pages/consolidation.py", title="Consolidation", icon="📊"),
+        st.Page("pages/historique_consolidation.py", title="↳ Historique", icon="🕓",
+                url_path="historique-consolidations"),
     ],
     "Gestion": [
         st.Page("pages/clients.py", title="Clients", icon="👥"),
         st.Page("pages/mapping.py", title="Table de correspondance", icon="🗂️"),
-        st.Page("pages/historique.py", title="Historique conversions", icon="🕓"),
-        st.Page("pages/historique_consolidation.py", title="Historique consolidations", icon="📈"),
     ],
     "Paramètres": [
         st.Page("pages/reglages.py", title="Réglages", icon="⚙️"),
@@ -231,6 +241,18 @@ pages = {
         st.Page("pages/documentation.py", title="Documentation", icon="📚"),
     ],
 }
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebarNav"] a[href$="/historique"],
+    [data-testid="stSidebarNav"] a[href$="/historique-consolidations"] {
+        padding-left: 2.25rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 pg = st.navigation(pages)
 pg.run()

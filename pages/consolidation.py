@@ -11,8 +11,8 @@ du client et ne produit aucune écriture Pennylane. Les deux traitements
 partagent en revanche le même applicatif, le même mécanisme d'archivage et le
 même client sélectionné.
 
-L'historique de ces consolidations se consulte depuis « Historique
-consolidations », séparé de celui des conversions.
+L'historique de ces consolidations se consulte depuis la page « Historique »
+rangée sous celle-ci dans le menu, distincte de celle des conversions.
 """
 from __future__ import annotations
 
@@ -27,24 +27,45 @@ from core.lightspeed_synthese import (
     deviner_site,
 )
 from core.timezone import now_local
-from core.ui_common import select_client
+from core.ui_common import select_client, styliser_zone_de_depot
 
 client_id = select_client()
 
 st.title("📊 Consolidation LightSpeed")
 st.caption(
-    "Déposez les deux rapports Lightspeed Back Office d'une même période — « Tickets » et "
-    "« Transactions » — pour obtenir la synthèse du CA par période de service. Plusieurs jours "
-    "peuvent être traités d'un coup en déposant tous les exports : les doublons sont éliminés."
+    "Importez les deux rapports Lightspeed Back Office d'une même période, associez chaque "
+    "fichier à son rapport et à son site, puis générez le classeur de synthèse du CA par "
+    "période de service. Plusieurs jours peuvent être traités d'un coup : les doublons sont "
+    "éliminés."
 )
 
 if client_id is None:
-    st.info("Créez un client (page **Clients**) avant de pouvoir lancer une consolidation.")
+    st.info("Créez un client (menu latéral, ou page **Clients**) avant de pouvoir lancer une consolidation.")
     st.stop()
 
-st.subheader("1. Déposer les exports")
+# Emplacement réservé à la relève manuelle des mails, volontairement inactif à
+# ce stade. La conversion comptable traite UNE pièce jointe par message ; la
+# consolidation en demande DEUX, appariées — les rapports Tickets et
+# Transactions de la même période. Les apparier (même message ou messages
+# distincts, attente du second, vérification que les deux couvrent bien la même
+# période) est un sujet à part entière, à traiter une fois la version manuelle
+# validée. L'emplacement est posé ici, à la même place et sous le même libellé
+# que page Convertisseur, pour que la page ne se réorganise pas le jour où il
+# devient actif.
+with st.expander("📧 Ou : relever les mails maintenant (fetch automatique)"):
+    st.info(
+        "**Pas encore disponible pour la consolidation.** Contrairement à la conversion "
+        "comptable, qui traite une pièce jointe par message, la consolidation a besoin des "
+        "**deux rapports d'une même période** — Tickets et Transactions. Leur rapprochement "
+        "automatique fera l'objet d'une évolution dédiée, une fois la version manuelle validée. "
+        "En attendant, déposez les fichiers ci-dessous."
+    )
+    st.button("📧 Relever les mails maintenant", disabled=True, key="conso_fetch_indisponible")
+
+st.subheader("1. Importer les rapports Tickets et Transactions")
+styliser_zone_de_depot()
 uploaded_files = st.file_uploader(
-    "Rapports Tickets et Transactions (.xls / .xlsx)",
+    "Rapports Lightspeed Tickets et Transactions (.xls / .xlsx)",
     type=["xls", "xlsx"],
     accept_multiple_files=True,
     key="conso_uploader",
@@ -66,10 +87,10 @@ par_nom = {uf.name: uf for uf in uploaded_files}
 noms = list(par_nom)
 sugg_tickets, sugg_transactions, inconnus = classer_fichiers(noms)
 
-st.subheader("2. Vérifier la répartition des fichiers")
+st.subheader("2. Associer chaque fichier à son rapport et au site")
 st.caption(
-    "Pré-remplie d'après le nom des fichiers (`..._tickets_...` / `..._transactions_...`). "
-    "Corrigez si un export a été renommé."
+    "Pré-rempli d'après le nom des fichiers (`..._tickets_...` / `..._transactions_...`), "
+    "comme le point de vente l'est page Convertisseur. Corrigez si un export a été renommé."
 )
 if inconnus:
     st.warning(
@@ -108,7 +129,7 @@ if not pret and not en_double:
     st.info("Sélectionnez au moins un rapport de chaque type pour lancer la consolidation.")
 
 st.divider()
-st.subheader("3. Consolider")
+st.subheader("3. Consolidation et contrôle du chiffre d'affaires")
 
 if st.button("🔄 Lancer la consolidation", type="primary", disabled=not pret):
     tickets = [(n, par_nom[n].getvalue()) for n in choix_tickets]
@@ -128,8 +149,6 @@ res = st.session_state.get("conso_resultat")
 if res is None:
     st.stop()
 
-st.divider()
-st.subheader("4. Résultat")
 st.caption(f"{res.site} — {res.periode_libelle} · {res.nb_tickets} tickets · {res.nb_lignes} lignes de transaction")
 
 m1, m2, m3, m4 = st.columns(4)
@@ -162,6 +181,13 @@ if a_verifier:
 else:
     st.info("Aucun point à vérifier signalé : groupes tous mappés, aucun ticket annulé, périodes cohérentes.")
 
+st.caption(
+    "📁 Cette consolidation a été archivée dans l'historique de ce client "
+    "(page « Historique », sous Consolidation)."
+)
+
+st.divider()
+st.subheader("4. Télécharger le classeur de synthèse")
 jour_fname = f"{res.jours[0]:%Y%m%d}" if res.jours else "sansdate"
 if len(res.jours) > 1:
     jour_fname += f"_{res.jours[-1]:%Y%m%d}"

@@ -1,4 +1,7 @@
-"""Éléments d'interface partagés entre les pages (sélecteur de client)."""
+"""Éléments d'interface partagés entre les pages : sélecteur de client,
+pied de menu, bandeau d'informations techniques, et présentation commune de
+la zone de dépôt de fichiers — tout ce qui doit rester identique d'une page à
+l'autre pour que l'outil garde une cohérence visuelle."""
 from __future__ import annotations
 
 import html
@@ -110,3 +113,76 @@ def render_footer_sidebar() -> None:
                 f'<div class="ls-pennylane-sidebar-footer">{html.escape(texte)}</div>',
                 unsafe_allow_html=True,
             )
+
+
+def styliser_zone_de_depot() -> None:
+    """Agrandit la zone de dépôt de fichiers et traduit ses libellés intégrés.
+
+    Appelée par TOUTES les pages proposant un dépôt de fichiers (Convertisseur,
+    Consolidation) : la présentation doit être la même partout, et dupliquer ce
+    correctif page par page reviendrait à les laisser diverger au premier
+    ajustement.
+
+    Zone de dépôt agrandie de 50% (plus facile à viser) et libellés traduits :
+    st.file_uploader ne propose ni paramètre de taille ni de traduction de ses
+    textes intégrés ("Upload", "200MB per file..."), ce qui impose un correctif
+    CSS (taille) + JS (traduction, rejouée à chaque rendu puisque Streamlit
+    reconstruit le DOM à chaque interaction)."""
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stFileUploaderDropzone"] {
+            min-height: 102px !important; /* 68px d'origine, +50% */
+            padding: 24px !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] span[data-testid="stIconMaterial"] {
+            font-size: 1.5em !important;
+        }
+        div[data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] p {
+            font-size: 1.1rem !important;
+        }
+        div[data-testid="stFileUploaderDropzoneInstructions"] span {
+            font-size: 1.05rem !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.iframe(
+        r"""
+        <script>
+        const traductions = [
+            [/^Upload$/, "Parcourir les fichiers"],
+            [/^Browse files$/, "Parcourir les fichiers"],
+            [/^Drag and drop file(s)? here$/, "Glissez-déposez votre fichier ici"],
+            [/^(\d+)MB per file(.*)$/, "$1 Mo par fichier$2"],
+        ];
+
+        function traduireNoeud(node) {
+            if (node.nodeType === Node.TEXT_NODE) {
+                const original = node.textContent;
+                const cible = original.trim();
+                for (const [motif, remplacement] of traductions) {
+                    if (motif.test(cible)) {
+                        const nouveau = original.replace(motif, remplacement);
+                        if (nouveau !== original) node.textContent = nouveau;
+                        return;
+                    }
+                }
+            } else {
+                node.childNodes.forEach(traduireNoeud);
+            }
+        }
+
+        function traduireTout() {
+            traduireNoeud(window.parent.document.body);
+        }
+
+        new MutationObserver(traduireTout).observe(window.parent.document.body, {
+            childList: true, subtree: true, characterData: true,
+        });
+        traduireTout();
+        </script>
+        """,
+        height=1,
+    )
