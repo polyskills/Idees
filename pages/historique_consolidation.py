@@ -14,6 +14,7 @@ import os
 import streamlit as st
 
 from core.history_store import MAX_HISTORIQUE_CONVERSIONS, list_consolidations
+from core.lightspeed_synthese import est_informatif
 from core.ui_common import select_client
 
 client_id = select_client()
@@ -81,10 +82,11 @@ with st.container(key="liste_consolidations"):
                 delta_color="off",
             )
 
-            # La ligne de contrôle d'équilibre est toujours présente dans les
-            # anomalies : elle est déjà affichée en indicateur ci-dessus, on ne
-            # la répète pas ici.
-            a_verifier = [a for a in e.get("anomalies", []) if not str(a[0]).startswith("Écart total transactions")]
+            # Mêmes exclusions qu'à l'écran de consolidation : le contrôle
+            # d'équilibre est déjà affiché en indicateur ci-dessus, et le
+            # rattachement des périodes est une règle de calcul, pas une
+            # anomalie (cf. LIBELLES_INFORMATIFS).
+            a_verifier = [a for a in e.get("anomalies", []) if not est_informatif(a[0])]
             for anomalie in a_verifier:
                 libelle, valeur, detail = (list(anomalie) + ["", ""])[:3]
                 st.warning(f"**{libelle}** — {valeur}\n\n{detail}")

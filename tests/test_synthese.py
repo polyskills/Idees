@@ -186,7 +186,7 @@ def test_synthese_signale_les_groupes_non_mappes_et_les_annulations():
     assert "MP CUISINE" in libelles["Groupes non mappés (famille AUTRE)"][2]
     assert libelles["Tickets annulés (VOID, comptés en négatif)"][1] == 1
     # R2 : profil Lightspeed (clôture) "Bar Soir" vs période retenue (ouverture)
-    cle = "Tickets dont la période (ouverture) diffère du profil Lightspeed (clôture)"
+    cle = "Tickets rattachés à leur période d'ouverture, et non au profil Lightspeed de clôture"
     assert libelles[cle][1] == 1
     assert "R2" in libelles[cle][2]
 
@@ -291,3 +291,28 @@ def test_synthese_melange_xlsx_et_csv():
     res = construire_synthese(tickets_xlsx, transactions_csv, "BAR")
     assert res.ca_ttc == 180.0
     assert res.ecart_controle == 0.0
+
+
+def test_le_rattachement_des_periodes_nest_pas_un_point_a_verifier():
+    # Une table ouverte avant une frontière de période et réglée après en
+    # déclenche une : dans un bar, tous les jours. C'est la règle de calcul de
+    # l'outil, pas une anomalie — elle figure dans le classeur pour expliquer
+    # un écart avec un rapport Lightspeed natif, mais ne doit ni alerter, ni
+    # faire passer la consolidation en avertissement.
+    res = construire_synthese(*_exports(), "BAR")
+    libelles_verif = [a[0] for a in res.anomalies_a_verifier]
+    assert not any(l.startswith("Tickets rattachés") for l in libelles_verif)
+    assert not any(l.startswith("Écart total transactions") for l in libelles_verif)
+    # Mais la ligne reste présente dans le classeur
+    assert any(a[0].startswith("Tickets rattachés") for a in res.anomalies)
+
+
+def test_journee_sans_rattachement_ni_groupe_inconnu_na_rien_a_verifier():
+    # Jeu réduit : un seul ticket, ouvert et réglé dans la même période, sur un
+    # groupe mappé. Aucun point à vérifier, donc statut OK côté historique.
+    tickets = [("R1", "07/09/26 13:30", "A1", "BAR, Table 5", 100, 90, 2, "SALE", "Non",
+                "Bar Journée", "07/09/26 12:00")]
+    transactions = [("S1", "A1", "SALE", 1, 100, "Planche", "FOOD Snack", 90, 10)]
+    res = construire_synthese(*_exports(tickets, transactions), "BAR")
+    assert res.anomalies_a_verifier == []
+    assert res.sans_anomalie_bloquante

@@ -85,6 +85,29 @@ MAPPING_GROUPES = {
 TAUPE, GRIS_CLAIR, GRIS_MOYEN, ANTHRACITE = "B7B09C", "B5B7BB", "898989", "333333"
 FONT = "Montserrat"
 
+# Lignes de l'onglet ANOMALIES qui ne signalent PAS un problème et ne doivent
+# donc ni faire passer une consolidation en avertissement, ni s'afficher comme
+# un point à vérifier :
+# - le contrôle d'équilibre, toujours présent et déjà remonté en indicateur ;
+# - le rattachement des tickets à leur période d'OUVERTURE, qui se déclenche
+#   pour toute table ouverte avant une frontière de période et réglée après.
+#   Autant dire tous les jours dans un bar (9 tickets sur 23 sur une journée
+#   réelle) : le présenter comme une anomalie ferait croire à un problème
+#   récurrent alors que c'est la règle de calcul assumée de l'outil. La ligne
+#   reste dans le classeur, où elle sert à expliquer un écart avec un rapport
+#   Lightspeed natif, mais comme information.
+# L'ancien libellé est conservé pour que les consolidations déjà archivées
+# s'affichent de la même façon que les nouvelles.
+LIBELLES_INFORMATIFS = (
+    "Écart total transactions",
+    "Tickets rattachés à leur période d'ouverture",
+    "Tickets dont la période (ouverture) diffère du profil Lightspeed",
+)
+
+
+def est_informatif(libelle: str) -> bool:
+    return str(libelle).startswith(LIBELLES_INFORMATIFS)
+
 # Colonnes indispensables au traitement : contrôlées à la lecture pour
 # transformer un KeyError pandas illisible en message actionnable, et pour
 # détecter tout de suite qu'on a interverti les deux rapports.
@@ -135,11 +158,9 @@ class SyntheseResult:
 
     @property
     def anomalies_a_verifier(self) -> list:
-        """Anomalies méritant une vérification humaine — c'est-à-dire toutes
-        sauf la ligne de contrôle d'équilibre, toujours présente et qui ne dit
-        rien d'anormal quand elle vaut 0."""
-        return [a for a in self.anomalies
-                if not a[0].startswith("Écart total transactions")]
+        """Anomalies méritant une vérification humaine, à l'exclusion des
+        lignes purement informatives (cf. LIBELLES_INFORMATIFS)."""
+        return [a for a in self.anomalies if not est_informatif(a[0])]
 
     @property
     def sans_anomalie_bloquante(self) -> bool:
@@ -347,7 +368,7 @@ def anomalies(t, x, m, periodes) -> list[tuple]:
                   ", ".join(sorted(set(hors["Profil"].astype(str))))))
     diff = t[(t["Profil"] != t["ProfilLightspeed"]) & (t["Type"] != "VOID")]
     if len(diff):
-        a.append(("Tickets dont la période (ouverture) diffère du profil Lightspeed (clôture)", len(diff),
+        a.append(("Tickets rattachés à leur période d'ouverture, et non au profil Lightspeed de clôture", len(diff),
                   ", ".join(f"{i}: {a_} -> {b_}" for i, a_, b_ in
                             zip(diff["Identifier"], diff["ProfilLightspeed"], diff["Profil"]))))
     annules = t[t["Annulée"] == "Oui"]

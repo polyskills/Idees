@@ -85,9 +85,22 @@ nul signifie presque toujours que les deux rapports ne couvrent pas exactement
 la même période. Le classeur est tout de même produit — pour permettre le
 diagnostic — mais ses totaux ne sont pas exploitables en l'état.
 
-Les autres anomalies (groupes non mappés, tickets annulés, période d'ouverture
-différant du profil Lightspeed) sont des **points à vérifier**, pas des erreurs
-de calcul : elles n'empêchent pas d'utiliser le classeur.
+Les autres lignes de l'onglet `ANOMALIES` sont de deux natures.
+
+**Des points à vérifier**, signalés à l'écran et dans le mail de résultat, qui
+n'empêchent pas d'utiliser le classeur : groupes non mappés (famille `AUTRE`),
+tickets annulés.
+
+**Des informations**, qui ne sont ni signalées ni comptées comme anomalies :
+
+- l'**écart transactions/tickets**, déjà affiché en indicateur ;
+- les **tickets rattachés à leur période d'ouverture** et non au profil
+  Lightspeed de clôture. Toute table ouverte avant une frontière de période et
+  réglée après en fait partie — 9 tickets sur 23 sur une journée réelle, autant
+  dire tous les jours dans un bar. C'est la règle de calcul assumée de l'outil,
+  pas un défaut. La ligne reste dans le classeur parce qu'elle explique
+  précisément pourquoi une répartition par période peut différer de celle d'un
+  rapport Lightspeed natif, mais elle ne déclenche aucune alerte.
 
 ## Réception automatique par mail
 
