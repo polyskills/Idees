@@ -7,7 +7,7 @@
     virtuel (.venv) : seule la couche "service" est retirée.
 
 .EXAMPLE
-    cd C:\Apps\Idees
+    cd C:\Apps\Adaptools\LS2PL-Converter
     .\deploy\windows\uninstall-service.ps1
     .\deploy\windows\uninstall-service.ps1 -Port 8080 -ServiceName "LSPennylaneProd"
 #>

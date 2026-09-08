@@ -4,7 +4,7 @@
     service Windows.
 
 .EXAMPLE
-    cd C:\Apps\Idees
+    cd C:\Apps\Adaptools\LS2PL-Converter
     .\deploy\windows\update-service.ps1
 #>
 param(

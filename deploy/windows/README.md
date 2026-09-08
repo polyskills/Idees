@@ -20,9 +20,10 @@ Ouvrir **PowerShell en tant qu'administrateur**, puis :
 
 ```powershell
 # 1. Cloner le dépôt à l'emplacement de votre choix
-cd C:\Apps
-git clone https://github.com/polyskills/Idees.git
-cd Idees
+mkdir C:\Apps\Adaptools -Force  # dossier regroupant les applications Adaptools
+cd C:\Apps\Adaptools
+git clone https://github.com/polyskills/LS2PL-Converter.git
+cd LS2PL-Converter
 git checkout adaptools/lightspeed-converter
 
 # 2. Lancer l'installation du service (Python, dépendances, NSSM, service, pare-feu)
@@ -121,7 +122,7 @@ utilisateur ne serait pas vue par le service.)
 À chaque évolution du code (nouveau commit sur la branche) :
 
 ```powershell
-cd C:\Apps\Idees
+cd C:\Apps\Adaptools\LS2PL-Converter
 .\deploy\windows\update-service.ps1
 ```
 
@@ -141,7 +142,7 @@ l'app s'arrête simplement, NSSM la relance seule.
 ## Désinstaller le service
 
 ```powershell
-cd C:\Apps\Idees
+cd C:\Apps\Adaptools\LS2PL-Converter
 .\deploy\windows\uninstall-service.ps1
 ```
 
@@ -157,12 +158,12 @@ sont conservés** — seule la couche "service" est retirée.
 | Arrêter | `Stop-Service LightspeedPennylane` |
 | Démarrer | `Start-Service LightspeedPennylane` |
 | Redémarrer | `Restart-Service LightspeedPennylane` |
-| Voir les logs | fichiers dans `Idees\logs\service.out.log` et `service.err.log` |
+| Voir les logs | fichiers dans `LS2PL-Converter\logs\service.out.log` et `service.err.log` |
 | Modifier la config du service (avancé) | `.\deploy\windows\tools\nssm.exe edit LightspeedPennylane` (ouvre une interface graphique) |
 
 ## Sauvegarde des données
 
-Les données comptables des clients vivent dans `Idees\data\clients\`
+Les données comptables des clients vivent dans `LS2PL-Converter\data\clients\`
 (référentiels + historique des conversions, fichiers source et générés).
 **Ce dossier n'est pas versionné dans git** (données sensibles) — mettez en
 place une sauvegarde régulière de ce dossier (copie planifiée, sauvegarde
@@ -182,7 +183,7 @@ partagé, envisager au minimum l'un de :
 
 ## Dépannage
 
-**Le service ne démarre pas** : consulter `Idees\logs\service.err.log`.
+**Le service ne démarre pas** : consulter `LS2PL-Converter\logs\service.err.log`.
 Cause fréquente : port déjà utilisé par une autre application (relancer
 l'installation avec `-Port` sur un autre port), ou dépendance manquante
 (relancer `.\deploy\windows\update-service.ps1`).

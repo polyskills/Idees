@@ -28,9 +28,10 @@ Ouvrir **Terminal**, puis :
 
 ```bash
 # 1. Cloner le dépôt à l'emplacement de votre choix
-cd ~/Applications  # ou tout autre dossier
-git clone https://github.com/polyskills/Idees.git
-cd Idees
+mkdir -p ~/Applications/Adaptools  # dossier regroupant les applications Adaptools
+cd ~/Applications/Adaptools
+git clone https://github.com/polyskills/LS2PL-Converter.git
+cd LS2PL-Converter
 git checkout adaptools/lightspeed-converter
 
 # 2. Rendre les scripts exécutables (une seule fois)
@@ -138,7 +139,7 @@ sudo launchctl bootstrap system /Library/LaunchDaemons/com.polyskills.lightspeed
 À chaque évolution du code (nouveau commit sur la branche) :
 
 ```bash
-cd ~/Applications/Idees
+cd ~/Applications/Adaptools/LS2PL-Converter
 sudo ./deploy/macos/update-service.sh
 ```
 
@@ -158,7 +159,7 @@ s'arrête simplement, launchd la relance seule.
 ## Désinstaller le service
 
 ```bash
-cd ~/Applications/Idees
+cd ~/Applications/Adaptools/LS2PL-Converter
 sudo ./deploy/macos/uninstall-service.sh
 ```
 
@@ -174,12 +175,12 @@ couche "service" est retirée.
 | Arrêter | `sudo launchctl bootout system/com.polyskills.lightspeed-pennylane` |
 | Démarrer | `sudo launchctl bootstrap system /Library/LaunchDaemons/com.polyskills.lightspeed-pennylane.plist` |
 | Redémarrer | `sudo launchctl kickstart -k system/com.polyskills.lightspeed-pennylane` |
-| Voir les logs | fichiers dans `Idees/logs/service.out.log` et `service.err.log` |
+| Voir les logs | fichiers dans `LS2PL-Converter/logs/service.out.log` et `service.err.log` |
 | Modifier la config du service (avancé) | éditer `/Library/LaunchDaemons/com.polyskills.lightspeed-pennylane.plist` puis relancer bootstrap/kickstart ci-dessus |
 
 ## Sauvegarde des données
 
-Les données comptables des clients vivent dans `Idees/data/clients/`
+Les données comptables des clients vivent dans `LS2PL-Converter/data/clients/`
 (référentiels + historique des conversions, fichiers source et générés).
 **Ce dossier n'est pas versionné dans git** (données sensibles) — mettez en
 place une sauvegarde régulière de ce dossier (Time Machine, copie planifiée
@@ -199,7 +200,7 @@ envisager au minimum l'un de :
 
 ## Dépannage
 
-**Le service ne démarre pas** : consulter `Idees/logs/service.err.log`, et
+**Le service ne démarre pas** : consulter `LS2PL-Converter/logs/service.err.log`, et
 `sudo launchctl print system/com.polyskills.lightspeed-pennylane` (regarder
 `last exit code`). Cause fréquente : port déjà utilisé par une autre
 application (relancer l'installation avec `--port` sur un autre port), ou

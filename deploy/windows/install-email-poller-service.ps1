@@ -24,7 +24,7 @@
     Nom du service Windows créé (par défaut LightspeedPennylaneFetchMail).
 
 .EXAMPLE
-    cd C:\Apps\Idees
+    cd C:\Apps\Adaptools\LS2PL-Converter
     .\deploy\windows\install-email-poller-service.ps1
 #>
 param(

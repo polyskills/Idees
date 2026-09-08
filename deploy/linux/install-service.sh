@@ -49,7 +49,7 @@ REAL_USER="${SUDO_USER:-$(id -un)}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 if [ ! -f "$REPO_ROOT/app.py" ]; then
-    echo "app.py introuvable dans '$REPO_ROOT'. Lancez ce script depuis la RACINE du dépôt cloné (ex: cd ~/Apps/Idees)." >&2
+    echo "app.py introuvable dans '$REPO_ROOT'. Lancez ce script depuis la RACINE du dépôt cloné (ex: cd ~/Apps/Adaptools/LS2PL-Converter)." >&2
     exit 1
 fi
 

@@ -28,9 +28,10 @@ macOS.
 
 ```bash
 # 1. Cloner le dépôt à l'emplacement de votre choix
-cd ~/apps  # ou tout autre dossier, ex. /opt
-git clone https://github.com/polyskills/Idees.git
-cd Idees
+mkdir -p ~/Apps/Adaptools  # dossier regroupant les applications Adaptools
+cd ~/Apps/Adaptools
+git clone https://github.com/polyskills/LS2PL-Converter.git
+cd LS2PL-Converter
 git checkout adaptools/lightspeed-converter
 
 # 2. Rendre les scripts exécutables (une seule fois)
@@ -136,7 +137,7 @@ sudo systemctl restart lightspeed-pennylane-fetchmail
 À chaque évolution du code (nouveau commit sur la branche) :
 
 ```bash
-cd ~/apps/Idees
+cd ~/Apps/Adaptools/LS2PL-Converter
 sudo ./deploy/linux/update-service.sh
 ```
 
@@ -156,7 +157,7 @@ l'app s'arrête simplement, systemd la relance seule.
 ## Désinstaller le service
 
 ```bash
-cd ~/apps/Idees
+cd ~/Apps/Adaptools/LS2PL-Converter
 sudo ./deploy/linux/uninstall-service.sh
 ```
 
@@ -172,13 +173,13 @@ sont conservés** — seule la couche "service" est retirée.
 | Arrêter | `sudo systemctl stop lightspeed-pennylane` |
 | Démarrer | `sudo systemctl start lightspeed-pennylane` |
 | Redémarrer | `sudo systemctl restart lightspeed-pennylane` |
-| Voir les logs (fichiers) | `Idees/logs/service.out.log` et `service.err.log` |
+| Voir les logs (fichiers) | `LS2PL-Converter/logs/service.out.log` et `service.err.log` |
 | Voir les logs (journal systemd) | `sudo journalctl -u lightspeed-pennylane -f` |
 | Modifier la config du service (avancé) | `sudo systemctl edit --full lightspeed-pennylane` puis `sudo systemctl daemon-reload` |
 
 ## Sauvegarde des données
 
-Les données comptables des clients vivent dans `Idees/data/clients/`
+Les données comptables des clients vivent dans `LS2PL-Converter/data/clients/`
 (référentiels + historique des conversions, fichiers source et générés).
 **Ce dossier n'est pas versionné dans git** (données sensibles) — mettez en
 place une sauvegarde régulière de ce dossier (copie planifiée via `cron`,
@@ -199,7 +200,7 @@ partagé, envisager au minimum l'un de :
 
 ## Dépannage
 
-**Le service ne démarre pas** : consulter `Idees/logs/service.err.log` et
+**Le service ne démarre pas** : consulter `LS2PL-Converter/logs/service.err.log` et
 `sudo journalctl -u lightspeed-pennylane -n 50 --no-pager`. Cause fréquente :
 port déjà utilisé par une autre application (relancer l'installation avec
 `--port` sur un autre port), ou dépendance manquante (relancer

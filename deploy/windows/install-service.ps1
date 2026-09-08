@@ -22,7 +22,7 @@
     Nom du service Windows créé (par défaut LightspeedPennylane).
 
 .EXAMPLE
-    cd C:\Apps\Idees
+    cd C:\Apps\Adaptools\LS2PL-Converter
     .\deploy\windows\install-service.ps1
     .\deploy\windows\install-service.ps1 -Port 8080 -ServiceName "LSPennylaneProd"
 #>
@@ -51,7 +51,7 @@ function Assert-Admin {
 function Get-RepoRoot {
     $root = Get-Location
     if (-not (Test-Path (Join-Path $root "app.py"))) {
-        throw "app.py introuvable dans '$root'. Lancez ce script depuis la RACINE du dépôt cloné (ex: cd C:\Apps\Idees)."
+        throw "app.py introuvable dans '$root'. Lancez ce script depuis la RACINE du dépôt cloné (ex: cd C:\Apps\Adaptools\LS2PL-Converter)."
     }
     return $root
 }
