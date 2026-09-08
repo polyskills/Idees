@@ -571,3 +571,70 @@ def test_convert_compte_paiement_sans_point_de_vente_traite_comme_tous():
     res = convert(export, mappings, point_de_vente="REST", date_piece="11/08/26", numero_piece="LS-TEST")
     assert res.sans_erreur, res.erreurs
     assert next(l for l in res.lignes if l["Libellé de ligne"] == "ESPECES")["Numéro de compte"] == "530000"
+
+
+def _mappings_pour_pdv(code_pdv: str, code_journal: str | None) -> dict:
+    """Référentiel minimal complet pour convertir _SAMPLE_CSV_AVEC_POURBOIRES
+    au nom d'un point de vente donné, avec ou sans code journal propre."""
+    pdv = {"code": code_pdv, "libelle": code_pdv}
+    if code_journal is not None:
+        pdv["code_journal"] = code_journal
+    return {
+        **DEFAULT_MAPPINGS,
+        "parametres": {**DEFAULT_MAPPINGS["parametres"], "code_journal": "VT"},
+        "points_de_vente": [pdv],
+        "comptes_de_vente": [{"compte": "70110200", "libelle_compte": "VENTE LIQUIDE TVA 20%"}],
+        "departements": [{"categorie_lightspeed": "Plat", "compte": "70110200", "taux_tva": "20%"}],
+        "comptes_paiement": [
+            {"mode_paiement": "ESPECES", "compte": "530000", "libelle_compte": "Caisse"},
+            {"mode_paiement": "VISA MASTERCARD", "compte": "511100", "libelle_compte": "Remises CB"},
+        ],
+        "comptes_pourboires": [
+            {"point_de_vente": code_pdv, "mode_paiement": "VISA MASTERCARD", "compte": "462200",
+             "libelle_compte": "Pourboires CB"},
+        ],
+        "comptes_analytiques": [
+            {"compte": "70110200", "point_de_vente": code_pdv, "categorie_lightspeed": "Plat",
+             "code_analytique": code_pdv}
+        ],
+    }
+
+
+def test_convert_code_journal_propre_a_chaque_point_de_vente():
+    # Cas demandé : BAR tient le journal VTBAR et RESTAURANT le journal VTRST,
+    # sans que personne n'ait à saisir le code journal à la conversion. Le
+    # contrôle porte sur TOUTES les lignes de l'écriture (ventes, TVA,
+    # encaissements, pourboires) : une écriture à cheval sur deux journaux
+    # serait rejetée par Pennylane.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+
+    res_bar = convert(export, _mappings_pour_pdv("BAR", "VTBAR"), point_de_vente="BAR",
+                      date_piece="11/08/26", numero_piece="LS-TEST-BAR")
+    assert res_bar.sans_erreur, res_bar.erreurs
+    assert {l["Code Journal"] for l in res_bar.lignes} == {"VTBAR"}
+
+    res_rest = convert(export, _mappings_pour_pdv("RESTAURANT", "VTRST"), point_de_vente="RESTAURANT",
+                       date_piece="11/08/26", numero_piece="LS-TEST-RST")
+    assert res_rest.sans_erreur, res_rest.erreurs
+    assert {l["Code Journal"] for l in res_rest.lignes} == {"VTRST"}
+
+
+def test_convert_code_journal_retombe_sur_le_defaut_sans_journal_propre():
+    # Point de vente sans code journal : le défaut global s'applique, sans
+    # avertissement - c'est un paramétrage légitime, pas un oubli.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    res = convert(export, _mappings_pour_pdv("BAR", None), point_de_vente="BAR",
+                  date_piece="11/08/26", numero_piece="LS-TEST-BAR")
+    assert res.sans_erreur, res.erreurs
+    assert {l["Code Journal"] for l in res.lignes} == {"VT"}
+    assert not any("journal" in a.lower() for a in res.avertissements)
+
+
+def test_convert_code_journal_explicite_prime_sur_celui_du_point_de_vente():
+    # Le champ « Code journal » de la page Convertir reste un override
+    # ponctuel : il prime sur le journal du point de vente.
+    export = parse_lightspeed_export(_SAMPLE_CSV_AVEC_POURBOIRES, "export.csv")
+    res = convert(export, _mappings_pour_pdv("BAR", "VTBAR"), point_de_vente="BAR",
+                  date_piece="11/08/26", numero_piece="LS-TEST-BAR", code_journal="OD")
+    assert res.sans_erreur, res.erreurs
+    assert {l["Code Journal"] for l in res.lignes} == {"OD"}

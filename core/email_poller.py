@@ -200,7 +200,9 @@ def _traiter_piece_jointe(
         point_de_vente=source.code_pdv,
         date_piece=date_piece,
         numero_piece=numero_piece,
-        code_journal=mappings["parametres"].get("code_journal", "VT"),
+        # Pas de code journal imposé ici : la conversion applique la cascade
+        # (journal du point de vente, à défaut celui des paramètres généraux) -
+        # sur le chemin automatique, personne n'est là pour le saisir.
     )
 
     horodatage = now_local().strftime("%Y-%m-%d %H:%M:%S")

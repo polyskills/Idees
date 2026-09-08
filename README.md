@@ -52,7 +52,10 @@ Toutes les règles métier sont éditables dans l'interface (pas de valeur en
 dur dans le code), propres à chaque client, persistées dans
 `data/clients/<client_id>/mappings.json` :
 
-- **Points de vente** : liste des sites/points de vente du client.
+- **Points de vente** : liste des sites/points de vente du client. Chacun peut
+  porter son propre **code journal** (ex. BAR → `VTBAR`, RESTAURANT → `VTRST`) ;
+  laissé vide, c'est le code journal par défaut des paramètres généraux qui
+  s'applique.
 - **Comptes de vente** : référentiel pur des comptes Pennylane (code +
   libellé), indépendant de LightSpeed — sert à proposer une liste de choix
   fiable (menu déroulant) plutôt que de la saisie libre dans les deux
@@ -74,9 +77,9 @@ dur dans le code), propres à chaque client, persistées dans
   Réservé aux lignes sans valeur comptable propre, jamais pour écarter un
   montant réel dont on ne sait pas où l'imputer.
 - **TVA collectée** : taux de TVA → compte de TVA collectée.
-- **Paramètres généraux** (page Réglages) : code journal, code pays,
-  compte d'écart utilisé pour équilibrer un éventuel report d'encaissement,
-  etc.
+- **Paramètres généraux** (page Réglages) : code journal par défaut (celui des
+  points de vente qui n'ont pas le leur), code pays, compte d'écart utilisé
+  pour équilibrer un éventuel report d'encaissement, etc.
 
 Un jeu d'exemple (repris de la logique du fichier « Patch Lightspeed vers
 Pennylane » transmis) peut être injecté à la création d'un client, à des

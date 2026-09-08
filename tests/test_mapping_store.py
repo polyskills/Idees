@@ -10,7 +10,7 @@ import openpyxl
 import pytest
 
 from core.client_store import CLIENTS_DIR, create_client
-from core.mapping_store import EMPTY_MAPPINGS, build_export_global_xlsx, load_mappings, save_mappings
+from core.mapping_store import EMPTY_MAPPINGS, build_export_global_xlsx, find_code_journal, load_mappings, save_mappings
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +42,7 @@ def test_build_export_global_xlsx_un_onglet_par_table():
     ]
     ws = wb["Points de vente"]
     rows = list(ws.iter_rows(values_only=True))
-    assert rows[0] == ("code", "libelle", "adresse_email", "adresse_resultat", "commentaires")
+    assert rows[0] == ("code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires")
     assert rows[1][:2] == ("REST", "Restaurant")
 
 
@@ -213,3 +213,64 @@ def test_load_mappings_ne_touche_pas_un_code_deja_correct():
 
     reloaded = load_mappings(client["id"])
     assert reloaded["comptes_analytiques"][0]["code_analytique"] == "REST"
+
+
+# --- Code journal par point de vente --------------------------------------
+
+
+def _mappings_journaux() -> dict:
+    return {
+        **EMPTY_MAPPINGS,
+        "parametres": {**EMPTY_MAPPINGS["parametres"], "code_journal": "VT"},
+        "points_de_vente": [
+            {"code": "BAR", "libelle": "BAR", "code_journal": "VTBAR"},
+            {"code": "RESTAURANT", "libelle": "RESTAURANT", "code_journal": "VTRST"},
+            {"code": "SOM", "libelle": "SOMMELLERIE"},
+            {"code": "ADD", "libelle": "VENTES ADDITIONNELLES", "code_journal": "   "},
+        ],
+    }
+
+
+def test_find_code_journal_prend_celui_du_point_de_vente():
+    mappings = _mappings_journaux()
+    assert find_code_journal(mappings, "BAR") == "VTBAR"
+    assert find_code_journal(mappings, "RESTAURANT") == "VTRST"
+
+
+def test_find_code_journal_retombe_sur_le_defaut_si_le_pdv_na_pas_le_sien():
+    # Colonne absente de la fiche, ou renseignée avec des espaces seulement
+    # (saisie involontaire dans le tableau) : les deux valent "pas de journal
+    # propre", et retombent silencieusement sur le défaut - sans avertissement,
+    # c'est un paramétrage légitime.
+    mappings = _mappings_journaux()
+    assert find_code_journal(mappings, "SOM") == "VT"
+    assert find_code_journal(mappings, "ADD") == "VT"
+
+
+def test_find_code_journal_point_de_vente_inconnu_retombe_sur_le_defaut():
+    assert find_code_journal(_mappings_journaux(), "INEXISTANT") == "VT"
+
+
+def test_find_code_journal_referentiel_anterieur_a_la_colonne():
+    # Aucune fiche n'a la colonne (référentiel d'une version antérieure) :
+    # comportement strictement identique à l'ancien, sans migration.
+    mappings = {
+        **EMPTY_MAPPINGS,
+        "parametres": {**EMPTY_MAPPINGS["parametres"], "code_journal": "VTE"},
+        "points_de_vente": [{"code": "BAR", "libelle": "BAR"}],
+    }
+    assert find_code_journal(mappings, "BAR") == "VTE"
+
+
+def test_find_code_journal_sans_parametre_ni_pdv():
+    assert find_code_journal({}, "BAR") == "VT"
+
+
+def test_export_global_xlsx_exporte_le_code_journal_du_pdv():
+    mappings = {
+        **EMPTY_MAPPINGS,
+        "points_de_vente": [{"code": "BAR", "libelle": "BAR", "code_journal": "VTBAR"}],
+    }
+    wb = openpyxl.load_workbook(io.BytesIO(build_export_global_xlsx(mappings)))
+    rows = list(wb["Points de vente"].iter_rows(values_only=True))
+    assert rows[1][:3] == ("BAR", "BAR", "VTBAR")

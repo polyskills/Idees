@@ -9,7 +9,8 @@ client (les valeurs pré-remplies via « référentiel d'exemple » sont
 purement indicatives — comptes 511100/530000/445711.../etc. n'ont aucune
 valeur réelle) :
 
-- [ ] **Points de vente** : un par site/salle/activité réellement facturé
+- [ ] **Points de vente** : un par site/salle/activité réellement facturé,
+  avec son **code journal** s'il tient le sien (sinon celui par défaut)
 - [ ] **Comptes de vente** : le référentiel des comptes de vente Pennylane
   utilisés (sert de liste de choix aux deux tables suivantes)
 - [ ] **Départements LightSpeed** : une ligne par département LightSpeed
@@ -22,8 +23,8 @@ valeur réelle) :
   LightSpeed du client (Carte bleue, Espèces, Deliveroo, UberEats,
   Lightspeed Payments...)
 - [ ] **TVA collectée** : un compte par taux de TVA effectivement pratiqué
-- [ ] **Paramètres généraux** (page Réglages) : code journal, compte
-  d'écart/report
+- [ ] **Paramètres généraux** (page Réglages) : code journal par défaut,
+  compte d'écart/report
 
 Tant qu'une catégorie/mode de paiement/combinaison analytique manque, la
 conversion **bloque volontairement** l'export (jamais de perte silencieuse)

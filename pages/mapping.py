@@ -185,6 +185,10 @@ pdv_options_avec_tous = [TOUS_POINTS_DE_VENTE] + pdv_options
 with tab_pdv:
     st.markdown(
         "Liste des points de vente (sites, salles, activités...) rencontrés dans les exports LightSpeed. "
+        "Le **code journal** est optionnel : renseignez-le pour qu'un point de vente tienne son propre "
+        "journal de ventes (ex. BAR → `VTBAR`, RESTAURANT → `VTRST`) ; plusieurs points de vente peuvent "
+        "viser le même journal. Laissé vide, c'est le code journal par défaut de la page **Réglages** "
+        "qui s'applique. "
         "L'**adresse mail de réception** est optionnelle : si elle est renseignée, tout export LightSpeed reçu "
         "automatiquement à cette adresse sera rattaché à ce point de vente (voir la moulinette de "
         "réception automatique). Elle doit être unique entre tous les clients. "
@@ -197,6 +201,7 @@ with tab_pdv:
         {
             "code": "Code point de vente",
             "libelle": "Libellé",
+            "code_journal": "Code journal",
             "adresse_email": "Adresse mail de réception",
             "adresse_resultat": "Adresse mail de résultat",
             "commentaires": "Commentaires",
@@ -207,7 +212,7 @@ with tab_pdv:
     edited_pdv_df = st.data_editor(
         _as_editable_df(
             mappings.get("points_de_vente", []),
-            ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"],
+            ["code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires"],
             tri=tri_pdv,
             decroissant=decroissant_pdv,
         ),
@@ -217,6 +222,11 @@ with tab_pdv:
         column_config={
             "code": st.column_config.TextColumn("Code point de vente", required=True),
             "libelle": st.column_config.TextColumn("Libellé", required=True),
+            "code_journal": st.column_config.TextColumn(
+                "Code journal (optionnel)",
+                help="Journal de ventes propre à ce point de vente (ex. VTBAR, VTRST). "
+                "Laisser vide pour utiliser le code journal par défaut défini page Réglages.",
+            ),
             "adresse_email": st.column_config.TextColumn(
                 "Adresse mail de réception (optionnelle)",
                 help="Adresse dédiée qui reçoit l'export automatique LightSpeed de ce point de vente.",

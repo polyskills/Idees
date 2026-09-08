@@ -21,7 +21,7 @@ from core.converter import convert
 from core.email_ingest import date_aaaammjj
 from core.history_store import record_conversion
 from core.lightspeed_parser import LightspeedParseError, parse_lightspeed_export
-from core.mapping_store import load_mappings
+from core.mapping_store import find_code_journal, load_mappings
 from core.pennylane_export import build_pennylane_csv
 from core.timezone import now_local
 from core.ui_common import select_client
@@ -249,8 +249,16 @@ if uploaded_files:
                     "Numéro de pièce", value=f"LS-{date_piece.strftime('%y%m%d')}{suffixe_pdv}", key=f"num_{uf.name}"
                 )
             with c4:
+                # La clé inclut le point de vente : sans ça, Streamlit conserverait la
+                # valeur du premier rendu et le champ resterait figé sur le journal du
+                # point de vente précédent après un changement dans le menu déroulant.
                 code_journal = st.text_input(
-                    "Code journal", value=mappings["parametres"].get("code_journal", "VT"), key=f"jrn_{uf.name}"
+                    "Code journal",
+                    value=find_code_journal(mappings, pdv),
+                    key=f"jrn_{uf.name}_{pdv}",
+                    help="Prérempli avec le code journal du point de vente choisi (à défaut, "
+                    "le code journal par défaut des Réglages) - modifiable ponctuellement "
+                    "pour cette conversion.",
                 )
 
             # Contrôle de premier niveau, indépendant du mapping comptable : le

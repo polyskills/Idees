@@ -62,11 +62,13 @@ Tables :
                          jamais pour écarter un montant réel dont on ne sait
                          juste pas où l'imputer (cf. compte_ecart pour ça).
 - comptes_tva          : Taux de TVA -> Compte de TVA collectée
-- points_de_vente      : liste des points de vente connus (code + libellé + adresse mail
+- points_de_vente      : liste des points de vente connus (code + libellé + code journal
+                         propre au point de vente, optionnel - à défaut celui des
+                         paramètres généraux, cf. find_code_journal + adresse mail
                          de réception de l'export automatique, optionnelle + adresse mail
                          de résultat, optionnelle - destinataire du CSV et du récapitulatif
                          après conversion, par défaut l'adresse de réception elle-même)
-- parametres           : réglages généraux (code journal, compte d'écart/report, etc.)
+- parametres           : réglages généraux (code journal par défaut, compte d'écart/report, etc.)
 """
 from __future__ import annotations
 
@@ -112,10 +114,12 @@ EMPTY_MAPPINGS = {
 # usage en production.
 DEFAULT_MAPPINGS = {
     "parametres": dict(EMPTY_MAPPINGS["parametres"]),
+    # Les trois derniers n'ont volontairement pas de code journal : ils illustrent
+    # le repli sur celui des paramètres généraux, qui reste le cas courant.
     "points_de_vente": [
-        {"code": "REST", "libelle": "RESTAURANT"},
-        {"code": "BARF", "libelle": "BAR FOOD"},
-        {"code": "BARS", "libelle": "BAR SOMMELLERIE"},
+        {"code": "REST", "libelle": "RESTAURANT", "code_journal": "VTRST"},
+        {"code": "BARF", "libelle": "BAR FOOD", "code_journal": "VTBAR"},
+        {"code": "BARS", "libelle": "BAR SOMMELLERIE", "code_journal": "VTBAR"},
         {"code": "SOM", "libelle": "SOMMELLERIE"},
         {"code": "ADD", "libelle": "VENTES ADDITIONNELLES"},
         {"code": "PARIS", "libelle": "PARIS 2.0"},
@@ -371,6 +375,24 @@ def find_pdv(mappings: dict, code_pdv: str) -> dict | None:
     return None
 
 
+def find_code_journal(mappings: dict, point_de_vente: str) -> str:
+    """Code journal à utiliser pour une écriture de CE point de vente : le sien
+    s'il en a un (colonne « code journal » de la table Points de vente), sinon
+    celui des paramètres généraux.
+
+    Chaque point de vente peut tenir son propre journal de ventes (ex. BAR ->
+    VTBAR, RESTAURANT -> VTRST) ; plusieurs points de vente peuvent viser le
+    même journal, c'est un simple attribut de la fiche, pas une table à part.
+    Un point de vente sans code journal retombe silencieusement sur le défaut
+    global : c'est un choix de paramétrage légitime (un seul journal pour tout
+    le client), pas un oubli - donc pas d'avertissement de conversion.
+
+    Un référentiel antérieur à cette colonne n'a aucun code journal nulle part
+    et retombe donc intégralement sur l'ancien comportement, sans migration."""
+    pdv = find_pdv(mappings, point_de_vente) or {}
+    return (pdv.get("code_journal") or "").strip() or mappings.get("parametres", {}).get("code_journal", "VT")
+
+
 def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> None:
     """Renseigne l'adresse mail d'un point de vente existant, sans écraser une
     valeur déjà personnalisée (idempotent, comme ensure_points_de_vente)."""
@@ -392,7 +414,7 @@ def set_pdv_adresse_email(client_id: str, code_pdv: str, adresse_email: str) -> 
 # à Comptes de vente PL) plutôt que le seul code stocké ; Attribution
 # analytique a en plus une ligne par département en stockage, pas par groupe.
 _TABLES_EXPORT_GLOBAL = [
-    ("Points de vente", "points_de_vente", ["code", "libelle", "adresse_email", "adresse_resultat", "commentaires"]),
+    ("Points de vente", "points_de_vente", ["code", "libelle", "code_journal", "adresse_email", "adresse_resultat", "commentaires"]),
     ("Comptes de vente PL", "comptes_de_vente", ["compte", "libelle_compte", "commentaires"]),
     ("Codes Analytique PL", "codes_analytiques", ["code_analytique", "description", "commentaires"]),
     ("Moyens de paiements", "comptes_paiement", ["point_de_vente", "mode_paiement", "compte", "libelle_compte", "commentaires"]),

@@ -54,7 +54,14 @@ with tab_generaux:
     params = mappings.get("parametres", {})
     c1, c2 = st.columns(2)
     with c1:
-        code_journal = st.text_input("Code journal par défaut", value=params.get("code_journal", "VT"))
+        code_journal = st.text_input(
+            "Code journal par défaut",
+            value=params.get("code_journal", "VT"),
+            help="Utilisé pour les points de vente qui n'ont pas leur propre code journal. "
+            "Pour qu'un point de vente tienne son propre journal (ex. BAR → VTBAR, "
+            "RESTAURANT → VTRST), renseignez la colonne « Code journal » de l'onglet "
+            "« Points de vente », page Table de correspondance.",
+        )
         code_pays = st.text_input("Code pays du compte", value=params.get("code_pays", "FR"))
         devise = st.text_input("Devise", value=params.get("devise", "EUR"))
         famille = st.text_input(

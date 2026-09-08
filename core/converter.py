@@ -11,6 +11,7 @@ from core.lightspeed_parser import LightspeedExport
 from core.mapping_store import (
     est_mode_paiement_ignore,
     find_code_analytique,
+    find_code_journal,
     find_compte_paiement,
     find_compte_pourboire,
     find_compte_reference,
@@ -88,7 +89,9 @@ def convert(
     code_journal: str | None = None,
 ) -> ConversionResult:
     params = mappings.get("parametres", {})
-    code_journal = code_journal or params.get("code_journal", "VT")
+    # Un code journal passé explicitement (saisi à l'écran pour ce fichier) prime ;
+    # sinon celui du point de vente, sinon le défaut global (cf. find_code_journal).
+    code_journal = code_journal or find_code_journal(mappings, point_de_vente)
     code_pays = params.get("code_pays", "FR")
     famille_defaut = params.get("famille_categorie_analytique", "POINT_DE_VENTE")
     libelle_piece = libelle_piece or f"Ventes LightSpeed {export.source_filename}"
