@@ -6,23 +6,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
+from core import app_config
 from core.app_config import (
-    APP_CONFIG_PATH,
     has_auth_password,
     is_auth_active,
     set_auth_active,
     set_auth_password,
     verifier_mot_de_passe,
 )
-
-
-@pytest.fixture(autouse=True)
-def _clean_app_config():
-    if os.path.exists(APP_CONFIG_PATH):
-        os.remove(APP_CONFIG_PATH)
-    yield
-    if os.path.exists(APP_CONFIG_PATH):
-        os.remove(APP_CONFIG_PATH)
 
 
 def test_auth_desactivee_et_sans_mot_de_passe_par_defaut():
@@ -39,7 +30,9 @@ def test_set_auth_password_puis_verification():
 
 def test_mot_de_passe_jamais_stocke_en_clair():
     set_auth_password("secret123")
-    with open(APP_CONFIG_PATH, "r", encoding="utf-8") as f:
+    # Lu via le module, jamais via un `from ... import` : c'est l'attribut
+    # du module que la fixture d'isolation redirige (cf. tests/conftest.py).
+    with open(app_config.APP_CONFIG_PATH, "r", encoding="utf-8") as f:
         contenu = f.read()
     assert "secret123" not in contenu
 

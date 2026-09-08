@@ -1,20 +1,12 @@
 """Tests de core.client_store : création, renommage et suppression de client."""
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from core.client_store import CLIENTS_DIR, create_client, delete_client, get_client, list_clients
-
-
-@pytest.fixture(autouse=True)
-def _clean_clients_dir():
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
-    yield
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
+from core.client_store import create_client, delete_client, get_client, list_clients
 
 
 def test_supprimer_un_client_fonctionne():

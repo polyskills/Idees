@@ -5,7 +5,6 @@ core.graph_client.GraphClient) simule les réponses Microsoft Graph.
 """
 import io
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,24 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from openpyxl import Workbook
 
-from core.app_config import APP_CONFIG_PATH
-from core.client_store import CLIENTS_DIR, create_client, get_prefixe_mail, set_azure_credentials, set_prefixe_mail
+from core.client_store import create_client, get_prefixe_mail, set_azure_credentials, set_prefixe_mail
 from core.email_poller import _identifiants_azure, traiter_client
 from core.history_store import list_history
 from core.mapping_store import DEFAULT_MAPPINGS, load_mappings, save_mappings, set_pdv_adresse_email
-
-
-def _clean():
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
-    if os.path.exists(APP_CONFIG_PATH):
-        os.remove(APP_CONFIG_PATH)
-
-
-@pytest.fixture(autouse=True)
-def _clean_clients_dir():
-    _clean()
-    yield
-    _clean()
 
 
 def _build_sample_xlsx() -> bytes:

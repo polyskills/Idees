@@ -1,7 +1,6 @@
 """Tests de core.mapping_store : export global .xlsx (un onglet par table)."""
 import io
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,15 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import openpyxl
 import pytest
 
-from core.client_store import CLIENTS_DIR, create_client
+from core.client_store import create_client
 from core.mapping_store import EMPTY_MAPPINGS, build_export_global_xlsx, find_code_journal, load_mappings, save_mappings
-
-
-@pytest.fixture(autouse=True)
-def _clean_clients_dir():
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
-    yield
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
 
 
 def test_build_export_global_xlsx_un_onglet_par_table():

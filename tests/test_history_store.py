@@ -1,14 +1,13 @@
 """Tests de core.history_store : purge au-delà de MAX_HISTORIQUE_CONVERSIONS
 et calcul du nombre de jours depuis la dernière conversion réussie."""
 import os
-import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from core.client_store import CLIENTS_DIR, create_client
+from core.client_store import create_client
 from core.converter import ConversionResult
 from core.client_store import client_consolidation_index_path, client_history_index_path
 from core.history_store import (
@@ -22,13 +21,6 @@ from core.history_store import (
 )
 from core.lightspeed_synthese import SyntheseResult
 from core.timezone import now_local
-
-
-@pytest.fixture(autouse=True)
-def _clean_clients_dir():
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
-    yield
-    shutil.rmtree(CLIENTS_DIR, ignore_errors=True)
 
 
 def _res(point_de_vente="REST", statut_ok=True) -> ConversionResult:
