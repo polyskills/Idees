@@ -86,6 +86,23 @@ Pennylane » transmis) peut être injecté à la création d'un client, à des
 fins de test uniquement — à revalider intégralement avec le plan comptable
 réel avant toute mise en production.
 
+## Consolidation du CA par période de service (page « Consolidation »)
+
+Second traitement, **indépendant de la conversion comptable** : il croise les
+rapports Lightspeed **Tickets** et **Transactions** d'une même période pour
+produire un classeur Excel de synthèse de l'exploitation (CA et couverts par
+période de service, rotations de tables, durées de présence), sans consulter
+la table de correspondance ni produire d'écriture Pennylane.
+
+Le contrôle central est l'égalité entre le total des lignes de transaction et
+le total des tickets : un écart signale que les deux rapports ne couvrent pas
+la même période, et rend les totaux inexploitables.
+
+Voir `docs/consolidation.md` (également lisible depuis la page
+« Documentation » de l'application) pour les règles de calcul, les sites et
+les limites actuelles — notamment l'absence de réception automatique par mail,
+la consolidation demandant deux fichiers appariés.
+
 ## Documentation
 
 Toute la documentation de suivi (checklists, fonctionnement détaillé de

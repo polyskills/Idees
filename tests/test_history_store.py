@@ -12,11 +12,16 @@ from core.client_store import CLIENTS_DIR, create_client
 from core.converter import ConversionResult
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
+    TYPE_CONSOLIDATION,
+    TYPE_CONVERSION,
+    client_history_index_path,
     echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
     list_history,
+    record_consolidation,
     record_conversion,
 )
+from core.lightspeed_synthese import SyntheseResult
 from core.timezone import now_local
 
 
@@ -125,3 +130,108 @@ def test_echecs_apres_derniere_reussite_ignore_les_echecs_anterieurs():
 def test_echecs_apres_derniere_reussite_sans_aucune_reussite():
     entries = [{"statut": "ERREUR", "horodatage": "2026-08-18 14:15:36", "point_de_vente": "RESTAURANT"}]
     assert len(echecs_apres_derniere_reussite(entries)) == 1
+
+
+# --- Cohabitation conversions / consolidations dans le même journal --------
+
+
+def _synthese(site="BAR", ecart=0.0, anomalies=None) -> SyntheseResult:
+    import datetime as dt
+    res = SyntheseResult(site=site, classeur=b"xlsx")
+    res.jours = [dt.date(2026, 9, 7)]
+    res.nb_tickets, res.nb_lignes = 23, 187
+    res.ca_ttc, res.ca_ht, res.couverts = 1949.0, 1696.06, 47
+    res.anomalies = [("Écart total transactions - tickets (TTC)", ecart, "0 attendu")] + (anomalies or [])
+    return res
+
+
+def _record_conso(client_id, n, site="BAR"):
+    for i in range(n):
+        record_consolidation(
+            client_id,
+            _synthese(site=site),
+            sources=[("tickets.xls", b"t"), ("transactions.xls", b"x")],
+            horodatage=f"2026-02-{(i % 28) + 1:02d} 10:00:00",
+        )
+
+
+def test_conversion_et_consolidation_sont_distinguees():
+    client = create_client("Test Types")
+    _record(client["id"], 3)
+    _record_conso(client["id"], 2)
+
+    assert len(list_history(client["id"])) == 5                       # journal complet
+    assert len(list_history(client["id"], TYPE_CONVERSION)) == 3
+    assert len(list_history(client["id"], TYPE_CONSOLIDATION)) == 2
+    assert {e["type"] for e in list_history(client["id"], TYPE_CONSOLIDATION)} == {TYPE_CONSOLIDATION}
+
+
+def test_entree_sans_type_est_traitee_comme_une_conversion():
+    # Journal écrit par une version antérieure à la consolidation : aucune
+    # migration ne doit être nécessaire pour que la page Historique le montre.
+    client = create_client("Test Ancien Journal")
+    _record(client["id"], 1)
+    chemin = client_history_index_path(client["id"])
+    contenu = open(chemin, encoding="utf-8").read().replace('"type": "conversion", ', "")
+    open(chemin, "w", encoding="utf-8").write(contenu)
+
+    entrees = list_history(client["id"], TYPE_CONVERSION)
+    assert len(entrees) == 1
+    assert "type" not in entrees[0]
+
+
+def test_la_purge_sapplique_type_par_type():
+    # Une série de consolidations ne doit pas évincer l'historique des
+    # conversions comptables : le plafond vaut pour chaque type séparément.
+    client = create_client("Test Purge Par Type")
+    _record(client["id"], 5)
+    _record_conso(client["id"], MAX_HISTORIQUE_CONVERSIONS + 10)
+
+    assert len(list_history(client["id"], TYPE_CONVERSION)) == 5
+    assert len(list_history(client["id"], TYPE_CONSOLIDATION)) == MAX_HISTORIQUE_CONVERSIONS
+
+
+def test_consolidation_archive_tous_ses_rapports_source():
+    client = create_client("Test Sources Multiples")
+    entree = record_consolidation(
+        client["id"],
+        _synthese(),
+        sources=[("tickets.xls", b"t"), ("transactions.xls", b"x")],
+        horodatage="2026-09-08 10:00:00",
+    )
+    chemins = entree["fichiers_sources_chemins"]
+    assert len(chemins) == 2
+    assert all(os.path.exists(c) for c in chemins)
+    assert os.path.exists(entree["fichier_genere_chemin"])
+    # Le champ au singulier reste renseigné : le format d'entrée des
+    # conversions doit rester lisible par du code qui ignore la consolidation.
+    assert entree["fichier_source_chemin"] == chemins[0]
+
+
+def test_purge_supprime_aussi_les_rapports_source_au_dela_du_premier():
+    client = create_client("Test Purge Sources")
+    premiere = record_consolidation(
+        client["id"], _synthese(), sources=[("tickets.xls", b"t"), ("transactions.xls", b"x")],
+        horodatage="2026-01-01 08:00:00",
+    )
+    _record_conso(client["id"], MAX_HISTORIQUE_CONVERSIONS)  # pousse la première hors fenêtre
+
+    for chemin in premiere["fichiers_sources_chemins"] + [premiere["fichier_genere_chemin"]]:
+        assert not os.path.exists(chemin), chemin
+
+
+def test_statut_consolidation_depend_de_lequilibre_et_des_anomalies():
+    client = create_client("Test Statuts Conso")
+    ok = record_consolidation(client["id"], _synthese(), sources=[("t.xls", b"t")], horodatage="2026-09-08 10:00:00")
+    assert ok["statut"] == "OK"
+
+    avert = record_consolidation(
+        client["id"], _synthese(anomalies=[("Groupes non mappés (famille AUTRE)", 1, "MP CUISINE")]),
+        sources=[("t.xls", b"t")], horodatage="2026-09-08 11:00:00",
+    )
+    assert avert["statut"] == "AVERTISSEMENT"
+
+    erreur = record_consolidation(
+        client["id"], _synthese(ecart=12.5), sources=[("t.xls", b"t")], horodatage="2026-09-08 12:00:00",
+    )
+    assert erreur["statut"] == "ERREUR"

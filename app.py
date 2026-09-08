@@ -216,11 +216,13 @@ except Exception as e:
 pages = {
     "Conversion": [
         st.Page("pages/converter.py", title="Convertisseur", icon="🧾", default=True),
+        st.Page("pages/consolidation.py", title="Consolidation", icon="📊"),
     ],
     "Gestion": [
         st.Page("pages/clients.py", title="Clients", icon="👥"),
         st.Page("pages/mapping.py", title="Table de correspondance", icon="🗂️"),
-        st.Page("pages/historique.py", title="Historique", icon="🕓"),
+        st.Page("pages/historique.py", title="Historique conversions", icon="🕓"),
+        st.Page("pages/historique_consolidation.py", title="Historique consolidations", icon="📈"),
     ],
     "Paramètres": [
         st.Page("pages/reglages.py", title="Réglages", icon="⚙️"),
