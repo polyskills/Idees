@@ -37,7 +37,7 @@ import logging
 import os
 import re
 
-from core.app_config import get_url_app
+from core.app_config import get_alerte_interne, get_azure_credentials_globaux, get_url_app
 from core.client_store import get_prefixe_mail, list_clients
 from core.converter import convert
 from core.consolidation_sas import (
@@ -70,7 +70,9 @@ def _extension_supportee(filename: str) -> bool:
 
 
 def _adresse_alerte_interne() -> str | None:
-    return os.environ.get("LSPENNYLANE_ALERTE_INTERNE") or None
+    """Réglage de l'application, à défaut variable d'environnement
+    (cf. core.app_config.get_alerte_interne)."""
+    return get_alerte_interne() or None
 
 
 def _adresses_destinataires(message: dict) -> list[str]:
@@ -566,13 +568,15 @@ def _identifiants_azure(client: dict) -> tuple[str, str] | None:
     """ID d'application + secret client Azure AD à utiliser pour ce client :
     priorité aux champs propres au client (azure_client_id/azure_client_secret,
     Réglages > Gestion Email — cf. core.client_store.set_azure_credentials),
-    sinon repli sur les variables d'environnement globales
-    LSPENNYLANE_AZURE_CLIENT_ID/_SECRET (comportement historique, ne
-    fonctionne que tant qu'un seul client utilise le fetch automatique sur ce
-    serveur, puisque partagées par tous). None si aucune des deux sources
-    n'est disponible."""
-    azure_client_id = client.get("azure_client_id") or os.environ.get("LSPENNYLANE_AZURE_CLIENT_ID")
-    azure_client_secret = client.get("azure_client_secret") or os.environ.get("LSPENNYLANE_AZURE_CLIENT_SECRET")
+    sinon repli sur les identifiants globaux de l'application (Réglages >
+    Gestion Email, eux-mêmes repliant sur les variables d'environnement
+    LSPENNYLANE_AZURE_CLIENT_ID/_SECRET — cf. core.app_config). Ces
+    identifiants globaux ne conviennent que tant qu'un seul tenant est
+    concerné sur ce serveur, puisqu'ils sont partagés par tous les clients.
+    None si aucune des deux sources n'est disponible."""
+    globaux_id, globaux_secret = get_azure_credentials_globaux()
+    azure_client_id = client.get("azure_client_id") or globaux_id
+    azure_client_secret = client.get("azure_client_secret") or globaux_secret
     if not azure_client_id or not azure_client_secret:
         return None
     return azure_client_id, azure_client_secret

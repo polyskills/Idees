@@ -74,6 +74,13 @@ l'app comprise, dans
    ```powershell
    [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_ID", "<app id>", "Machine")
    [Environment]::SetEnvironmentVariable("LSPENNYLANE_AZURE_CLIENT_SECRET", "<secret>", "Machine")
+
+> **Préférez les saisir dans l'application** — page Réglages > Gestion Email >
+> « Réglages du service de relève ». Renseignés là, ils sont emportés par la
+> sauvegarde complète des données et suivent l'outil sur une nouvelle machine ;
+> définis uniquement dans l'environnement du service, ils sont hors de portée de
+> l'application et donc absents de toute sauvegarde. Les variables ci-dessous
+> restent lues en repli.
    ```
 4. `LSPENNYLANE_ALERTE_INTERNE` (optionnelle, machine) : adresse recevant
    les alertes internes.

@@ -11,13 +11,16 @@ import json
 import streamlit as st
 
 from core.app_config import (
+    get_app_config,
     get_footer_sidebar,
     get_url_app,
     has_auth_password,
     is_auth_active,
+    reglages_service_effectifs,
     set_auth_active,
     set_auth_password,
     set_footer_sidebar,
+    set_reglages_service,
     set_url_app,
 )
 from core.client_store import (
@@ -164,6 +167,73 @@ with tab_email:
         st.rerun()
     if st.session_state.pop("_identifiants_azure_enregistres", None):
         st.success("✅ Identifiants Azure enregistrés.")
+
+    st.divider()
+    st.subheader("⚙️ Réglages du service de relève (globaux)")
+    st.caption(
+        "Contrairement aux réglages ci-dessus, propres au client sélectionné, ceux-ci valent pour "
+        "**tout le serveur**. Ils vivaient auparavant uniquement dans des variables d'environnement "
+        "posées à l'installation du service : hors de portée de l'application, et donc absents de "
+        "toute sauvegarde. Renseignés ici, ils sont emportés par la **sauvegarde complète des "
+        "données** et suivent l'outil sur une nouvelle machine. Les variables d'environnement "
+        "restent lues en repli si un champ est laissé vide."
+    )
+
+    etat_service = reglages_service_effectifs()
+
+    def _origine(cle: str) -> str:
+        info = etat_service[cle]
+        if info["origine"] == "environnement":
+            return f"↩️ Repli sur `{info['variable']}` (défini dans le service, pas dans l'application)"
+        if info["origine"] == "aucune":
+            return f"— Non configuré, ni ici ni via `{info['variable']}`"
+        return "✅ Enregistré dans l'application, donc sauvegardé"
+
+    with st.container(border=True):
+        alerte_interne = st.text_input(
+            "Adresse d'alerte interne",
+            value=get_app_config().get("alerte_interne", ""),
+            help="Destinataire des alertes du service : export non identifié, échec de conversion, "
+            "rapport de consolidation resté sans binôme. Vide = aucune alerte envoyée.",
+        )
+        st.caption(_origine("alerte_interne"))
+
+        cg1, cg2 = st.columns(2)
+        azure_id_global = cg1.text_input(
+            "ID d'application Azure (repli global)",
+            value=get_app_config().get("azure_client_id", ""),
+            help="Utilisé pour les clients qui n'ont pas leurs propres identifiants ci-dessus. "
+            "Ne convient que tant qu'un seul tenant est concerné sur ce serveur.",
+        )
+        azure_secret_global = cg2.text_input(
+            "Secret client Azure (repli global)",
+            value=get_app_config().get("azure_client_secret", ""),
+            type="password",
+        )
+        st.caption(_origine("azure_client_id"))
+
+        intervalle = st.number_input(
+            "Intervalle entre deux cycles de relève (secondes)",
+            min_value=0,
+            step=60,
+            value=int(get_app_config().get("poll_interval_seconds") or 0),
+            help="0 = laisser le service décider (variable d'environnement, à défaut 300 s). "
+            "La valeur est relue à chaque cycle : pas besoin de redémarrer le service.",
+        )
+        st.caption(_origine("poll_interval_seconds"))
+
+        st.warning(
+            "⚠️ Le secret Azure saisi ici est stocké en clair dans `data/app_config.json`, comme "
+            "l'est déjà celui de chaque client. Il se retrouve donc dans la sauvegarde complète — "
+            "c'est le but, mais l'archive est à traiter en conséquence."
+        )
+
+        if st.button("💾 Enregistrer les réglages du service", type="primary"):
+            set_reglages_service(alerte_interne, azure_id_global, azure_secret_global, int(intervalle))
+            st.session_state["_reglages_service_enregistres"] = True
+            st.rerun()
+    if st.session_state.pop("_reglages_service_enregistres", None):
+        st.success("✅ Réglages du service enregistrés.")
 
 with tab_sauvegarde:
     st.subheader("💾 Sauvegarde du référentiel et des réglages")

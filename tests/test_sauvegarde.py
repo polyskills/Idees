@@ -13,6 +13,7 @@ from core import app_config, client_store
 from core.client_store import create_client
 from core.converter import ConversionResult
 from core.history_store import chemin_fichier, list_history, record_conversion
+from core.app_config import set_reglages_service
 from core.sauvegarde import construire_archive_donnees, nom_archive, taille_lisible
 
 
@@ -95,3 +96,26 @@ def test_nom_archive_et_taille_lisible():
     assert taille_lisible(512) == "512 o"
     assert taille_lisible(2048) == "2.0 Ko"
     assert taille_lisible(5 * 1024 * 1024) == "5.0 Mo"
+
+
+def test_les_reglages_du_service_sont_dans_larchive():
+    # C'était le dernier angle mort d'une reprise sur nouvelle machine : ces
+    # réglages vivaient dans l'unité systemd, hors de portée de l'application.
+    import json
+    create_client("Client Réglages Service")
+    set_reglages_service("alerte@polyskills.fr", "app-id", "secret-azure", 600)
+
+    zf, _ = _archive()
+    config = json.loads(zf.read("data/app_config.json").decode("utf-8"))
+    assert config["alerte_interne"] == "alerte@polyskills.fr"
+    assert config["azure_client_id"] == "app-id"
+    assert config["azure_client_secret"] == "secret-azure"
+    assert config["poll_interval_seconds"] == 600
+
+
+def test_la_notice_explique_le_cas_des_reglages_restes_dans_lenvironnement():
+    create_client("Client Notice Service")
+    zf, _ = _archive()
+    notice = zf.read("SAUVEGARDE.txt").decode("utf-8")
+    assert "Réglages > Gestion Email" in notice
+    assert "à redéfinir à la main" in notice

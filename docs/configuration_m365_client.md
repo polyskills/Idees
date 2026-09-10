@@ -247,7 +247,8 @@ le fetch automatique prend le relais au cycle suivant, sans autre action.
 
 - Envoyer un export LightSpeed réel (ou de test) vers l'adresse dédiée
   d'un point de vente et attendre le prochain cycle du service (intervalle
-  par défaut : 5 minutes, réglable via `LSPENNYLANE_POLL_INTERVAL_SECONDS`
+  par défaut : 5 minutes, réglable page Réglages > Gestion Email (ou, en
+  repli, via `LSPENNYLANE_POLL_INTERVAL_SECONDS`)
   côté serveur).
 - Succès attendu : un mail de réponse avec le fichier source, le CSV
   Pennylane généré et un récapitulatif, à l'adresse d'origine ; la
@@ -255,7 +256,8 @@ le fetch automatique prend le relais au cycle suivant, sans autre action.
   Convertisseur).
 - En cas d'échec (adresse non reconnue, mapping manquant, fichier
   illisible...) : une alerte part vers l'adresse interne de supervision
-  (`LSPENNYLANE_ALERTE_INTERNE`, réglée côté serveur), jamais de fichier
+  (adresse d'alerte interne, page Réglages > Gestion Email, ou en repli
+  `LSPENNYLANE_ALERTE_INTERNE` côté serveur), jamais de fichier
   erroné envoyé au client. Voir [fetch_mail.md](fetch_mail.md) pour le
   détail du comportement en cas d'échec.
 

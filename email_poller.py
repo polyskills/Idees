@@ -35,6 +35,7 @@ import logging
 import os
 import time
 
+from core.app_config import get_poll_interval_seconds
 from core.email_poller import executer_un_cycle
 from core.self_update import RESTART_SENTINEL_EMAIL_POLLER
 
@@ -69,15 +70,15 @@ def _attendre(interval: int) -> None:
 
 
 def main() -> None:
-    interval = int(os.environ.get("LSPENNYLANE_POLL_INTERVAL_SECONDS", "300"))
-
-    log.info("Service de fetch LightSpeed démarré (intervalle %ss).", interval)
+    log.info("Service de fetch LightSpeed démarré (intervalle %ss).", get_poll_interval_seconds())
     while True:
         try:
             executer_un_cycle()
         except Exception:  # pragma: no cover - le service ne doit jamais s'arrêter sur une erreur ponctuelle
             log.exception("Échec du cycle de fetch — nouvelle tentative au prochain intervalle.")
-        _attendre(interval)
+        # Relu à chaque tour plutôt qu'une fois au démarrage : une modification
+        # depuis l'interface s'applique dès le cycle suivant, sans redémarrage.
+        _attendre(get_poll_interval_seconds())
 
 
 if __name__ == "__main__":

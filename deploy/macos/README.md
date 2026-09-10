@@ -86,6 +86,13 @@ l'app comprise, dans
    **Clients**, et adresse mail dédiée sur chaque point de vente page
    **Table de correspondance**.
 
+> **Préférez les saisir dans l'application** — page Réglages > Gestion Email >
+> « Réglages du service de relève ». Renseignés là, ils sont emportés par la
+> sauvegarde complète des données et suivent l'outil sur une nouvelle machine ;
+> définis uniquement dans le LaunchDaemon, ils sont hors de portée de
+> l'application et donc absents de toute sauvegarde. Les options ci-dessous
+> restent lues en repli.
+
 ⚠️ Les identifiants `--azure-client-id`/`--azure-client-secret` passés au
 script sont **globaux au service**, donc communs à tous les clients
 traités par ce serveur — cela suppose une app registration par client dont

@@ -66,9 +66,15 @@ pour l'installation du service. En résumé :
   (`Mail.ReadWrite` + `Mail.Send`) — voir
   [configuration_m365_client.md](configuration_m365_client.md) pour le
   pas-à-pas complet
-- [ ] Les variables d'environnement du service (`LSPENNYLANE_AZURE_CLIENT_ID`,
-  `LSPENNYLANE_AZURE_CLIENT_SECRET`, `LSPENNYLANE_ALERTE_INTERNE`) définies
-  sur le serveur avant d'installer `install-email-poller-service.ps1`
+- [ ] Les réglages globaux du service renseignés page **Réglages > Gestion
+  Email > « Réglages du service de relève »** : adresse d'alerte interne,
+  identifiants Azure de repli, intervalle entre deux cycles. **Les saisir là
+  plutôt que dans l'environnement du serveur** : ils entrent alors dans la
+  sauvegarde complète et suivent l'outil sur une nouvelle machine. Les
+  variables d'environnement (`LSPENNYLANE_AZURE_CLIENT_ID`,
+  `LSPENNYLANE_AZURE_CLIENT_SECRET`, `LSPENNYLANE_ALERTE_INTERNE`,
+  `LSPENNYLANE_POLL_INTERVAL_SECONDS`) restent lues en repli, pour les
+  installations antérieures
 
 ⚠️ Non testé à ce stade en conditions réelles (pas encore d'accès à un vrai
 tenant client) — seule la logique de routage/conversion/non-envoi-en-cas-

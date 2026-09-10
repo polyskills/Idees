@@ -206,6 +206,13 @@ ls /etc/systemd/system/ | grep lightspeed      # ne doit rien afficher
 
 Les identifiants Azure de la moulinette mail sont stockés **dans l'unité
 systemd elle-même** (`Environment=LSPENNYLANE_AZURE_CLIENT_SECRET=...`) :
+
+> **Préférez les saisir dans l'application** — page Réglages > Gestion Email >
+> « Réglages du service de relève ». Renseignés là, ils sont emportés par la
+> sauvegarde complète des données et suivent l'outil sur une nouvelle machine ;
+> définis uniquement dans l'environnement du service, ils sont hors de portée de
+> l'application et donc absents de toute sauvegarde. Les variables ci-dessous
+> restent lues en repli.
 supprimer l'unité les supprime aussi, aucun secret ne subsiste ailleurs.
 
 ### Rattrapage : le dossier a été supprimé avant les services

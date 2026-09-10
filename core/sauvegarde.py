@@ -11,16 +11,22 @@ Contenu :
 - `data/clients/`        : liste des clients, référentiels, les deux journaux,
                            fichiers archivés, sas d'appariement — et les
                            identifiants Azure, qui vivent sur la fiche client ;
-- `data/app_config.json` : code d'accès, URL de l'application, pied de menu.
-                           Sans lui, une restauration rendrait les clients mais
-                           une application sans code d'accès ni URL (celle qui
-                           construit les liens dans les mails de résultat).
+- `data/app_config.json` : code d'accès, URL de l'application, pied de menu, et
+                           les réglages du service de relève mail (adresse
+                           d'alerte interne, identifiants Azure de repli,
+                           intervalle) dès lors qu'ils sont saisis page
+                           Réglages > Gestion Email. Sans lui, une restauration
+                           rendrait les clients mais une application sans code
+                           d'accès, sans URL et sans alerte interne.
 
 Restent en dehors, volontairement : l'environnement virtuel et le binaire NSSM
-(réinstallés), les logs (sans valeur), et les variables d'environnement du
-service (`LSPENNYLANE_AZURE_CLIENT_ID/_SECRET`, `LSPENNYLANE_ALERTE_INTERNE`)
-qui vivent dans l'unité systemd ou les variables machine Windows, pas dans
-l'application — elles sont redéfinies à l'installation.
+(réinstallés), et les logs (sans valeur).
+
+Un cas subsiste : une installation dont les réglages de service vivent encore
+UNIQUEMENT dans des variables d'environnement (unité systemd, variables machine
+Windows) — l'application les lit en repli mais ne les possède pas, elle ne peut
+donc pas les sauvegarder. Les saisir page Réglages > Gestion Email les fait
+entrer dans l'archive.
 
 ⚠️ L'archive contient les secrets Azure de TOUS les clients et l'intégralité de
 leurs données comptables : à traiter comme une donnée sensible.
@@ -48,7 +54,10 @@ CONTENU
   data/clients/           tous les clients : référentiels, historiques des
                           conversions et des consolidations, fichiers
                           archivés, identifiants Azure
-  data/app_config.json    code d'accès, URL de l'application, pied de menu
+  data/app_config.json    code d'accès, URL de l'application, pied de menu, et
+                          les réglages du service de relève mail (alerte
+                          interne, identifiants Azure de repli, intervalle)
+                          s'ils ont été saisis dans l'interface
 
 RESTAURATION SUR UNE AUTRE MACHINE
   1. Installer l'application normalement (voir deploy/<os>/README.md) :
@@ -62,10 +71,15 @@ RESTAURATION SUR UNE AUTRE MACHINE
   client : l'application retrouve les fichiers archivés même si elle n'est pas
   installée au même endroit qu'à l'origine.
 
-  À REDÉFINIR À LA MAIN, car hors de l'application : les variables
-  d'environnement du service de relève mail
-  (LSPENNYLANE_AZURE_CLIENT_ID, LSPENNYLANE_AZURE_CLIENT_SECRET,
-  LSPENNYLANE_ALERTE_INTERNE).
+  RÉGLAGES DU SERVICE : ils sont dans cette archive s'ils ont été saisis page
+  Réglages > Gestion Email > « Réglages du service de relève ». S'ils vivaient
+  encore uniquement dans des variables d'environnement (LSPENNYLANE_ALERTE_
+  INTERNE, LSPENNYLANE_AZURE_CLIENT_ID, LSPENNYLANE_AZURE_CLIENT_SECRET,
+  LSPENNYLANE_POLL_INTERVAL_SECONDS), l'application ne pouvait pas les
+  sauvegarder : à redéfinir à la main sur la nouvelle machine, ou mieux, à
+  saisir dans l'interface pour qu'ils entrent dans les sauvegardes suivantes.
+  Le bloc de réglages indique, pour chaque champ, s'il vient de l'application
+  ou de l'environnement.
 
 CONFIDENTIALITÉ
   Cette archive contient les secrets Azure de tous les clients et l'intégralité
