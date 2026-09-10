@@ -13,7 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from core import app_config, client_store
-from core.client_store import client_history_files_dir, create_client
+from core.client_store import client_conversions_files_dir, create_client
 from core.history_store import record_conversion
 from core.converter import ConversionResult
 
@@ -40,7 +40,7 @@ def test_ecrire_pendant_un_test_ne_touche_pas_au_dossier_reel():
         horodatage="2026-09-08 10:00:00",
     )
 
-    assert client_history_files_dir(client["id"]).startswith(client_store.CLIENTS_DIR)
+    assert client_conversions_files_dir(client["id"]).startswith(client_store.CLIENTS_DIR)
     apres = sorted(os.listdir(DONNEES_REELLES)) if os.path.isdir(DONNEES_REELLES) else []
     assert avant == apres, "des fichiers sont apparus dans le dossier de données réel"
     assert not os.path.isdir(os.path.join(DONNEES_REELLES, "clients", client["id"]))

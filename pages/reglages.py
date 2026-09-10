@@ -29,6 +29,7 @@ from core.client_store import (
     set_prefixe_mail,
 )
 from core.mapping_store import build_export_global_xlsx, load_mappings, save_mappings
+from core.sauvegarde import construire_archive_donnees, nom_archive, taille_lisible
 from core.self_update import appliquer_mise_a_jour, redemarrer_apres_delai, verifier_mise_a_jour
 from core.timezone import now_local
 from core.ui_common import render_infos_techniques, select_client
@@ -321,6 +322,58 @@ with tab_sauvegarde:
                         st.session_state["_restauration_reussie"] = True
                         st.session_state["_version_uploader_restauration"] = _version_uploader + 1
                         st.rerun()
+
+    st.divider()
+    st.subheader("🗄️ Sauvegarde complète des données")
+    st.caption(
+        "Contrairement aux blocs ci-dessus, qui portent sur **le client sélectionné**, celui-ci "
+        "archive **l'intégralité des données de l'application, tous clients confondus** : c'est la "
+        "sauvegarde à conserver pour pouvoir remettre l'outil en service sur une autre machine."
+    )
+
+    with st.container(border=True):
+        st.markdown(
+            "L'archive contient tout ce que le dépôt Git ne porte pas — sans elle, une "
+            "réinstallation redonne l'application vide :\n\n"
+            "- **`data/clients/`** : liste des clients, référentiels, historiques des conversions "
+            "et des consolidations, fichiers archivés, identifiants Azure ;\n"
+            "- **`data/app_config.json`** : code d'accès, URL de l'application, pied de menu.\n\n"
+            "Restent à redéfinir à la main sur la nouvelle machine, car ils vivent dans le service "
+            "et non dans l'application : les variables d'environnement "
+            "`LSPENNYLANE_AZURE_CLIENT_ID`, `LSPENNYLANE_AZURE_CLIENT_SECRET` et "
+            "`LSPENNYLANE_ALERTE_INTERNE`. La marche à suivre complète est rappelée dans le "
+            "fichier `SAUVEGARDE.txt` placé à la racine de l'archive."
+        )
+        st.warning(
+            "⚠️ Cette archive contient les **secrets Azure de tous les clients** et l'intégralité "
+            "de leurs données comptables. À stocker en lieu sûr, hors du serveur."
+        )
+
+        # Deux temps volontaires : construire l'archive à chaque rendu de la page
+        # reviendrait à tout relire et recompresser au moindre clic ailleurs dans
+        # l'onglet, st.download_button exigeant ses données à l'avance.
+        if st.button("📦 Préparer l'archive", key="btn_preparer_archive"):
+            with st.spinner("Constitution de l'archive..."):
+                contenu, resume = construire_archive_donnees()
+            st.session_state["_archive_donnees"] = (contenu, resume, nom_archive())
+
+        archive = st.session_state.get("_archive_donnees")
+        if archive:
+            contenu, resume, nom = archive
+            st.success(
+                f"Archive prête — {resume['nb_clients']} client(s), {resume['nb_fichiers']} fichier(s), "
+                f"{taille_lisible(resume['taille_octets'])} (constituée le {resume['horodatage']})."
+            )
+            st.download_button(
+                "⬇️ Télécharger la sauvegarde complète (.zip)",
+                data=contenu,
+                file_name=nom,
+                mime="application/zip",
+                type="primary",
+                key="btn_telecharger_archive",
+            )
+
+    st.divider()
 
     with st.container(border=True):
         st.markdown("**📊 Export de la Table de correspondance**")

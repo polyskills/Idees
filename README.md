@@ -130,6 +130,13 @@ deux ne peut faire perdre les données de l'autre. Ce dossier est exclu du dép�
 Sur un serveur dédié, prévoir un disque persistant avec sauvegarde
 régulière pointant vers ce dossier — voir `data/README.md`.
 
+Pour une reprise sur une autre machine, la page **Réglages > Sauvegarde**
+propose une **sauvegarde complète** : un ZIP de `data/clients/` et de
+`data/app_config.json` (code d'accès, URL de l'application), accompagné de sa
+notice de restauration. C'est tout ce que le dépôt Git ne porte pas. Les
+chemins enregistrés dans les journaux étant relatifs au dossier de chaque
+client, l'archive reste exploitable même réinstallée à un autre emplacement.
+
 ## Lancer l'application
 
 ```bash

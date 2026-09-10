@@ -13,7 +13,7 @@ import os
 
 import streamlit as st
 
-from core.history_store import MAX_HISTORIQUE_CONVERSIONS, list_consolidations
+from core.history_store import MAX_HISTORIQUE_CONVERSIONS, chemin_fichier, list_consolidations
 from core.lightspeed_synthese import est_informatif
 from core.ui_common import select_client
 
@@ -93,8 +93,9 @@ with st.container(key="liste_consolidations"):
             if not a_verifier:
                 st.success("Aucun point à vérifier relevé sur cette consolidation.")
 
-            gen_path = e.get("fichier_genere_chemin")
-            if gen_path and os.path.exists(gen_path):
+            # cf. pages/historique.py : chemin relatif ou absolu hérité
+            gen_path = chemin_fichier(client_id, e.get("fichier_genere_chemin"))
+            if gen_path:
                 with open(gen_path, "rb") as f:
                     st.download_button(
                         "⬇️ Classeur de synthèse (.xlsx)",
@@ -109,7 +110,8 @@ with st.container(key="liste_consolidations"):
             chemins = e.get("fichiers_sources_chemins") or [e.get("fichier_source_chemin")]
             colonnes = st.columns(max(len(chemins), 1))
             for i, chemin in enumerate(chemins):
-                if chemin and os.path.exists(chemin):
+                chemin = chemin_fichier(client_id, chemin)
+                if chemin:
                     with open(chemin, "rb") as f:
                         colonnes[i].download_button(
                             f"⬇️ {os.path.basename(chemin).split('__source__')[-1]}",

@@ -27,10 +27,13 @@ import re
 import uuid
 
 from core.client_store import (
+    DOSSIER_CONVERSIONS,
+    DOSSIER_CONVERSIONS_AVANT_V11,
     client_consolidation_files_dir,
     client_consolidation_index_path,
-    client_history_files_dir,
-    client_history_index_path,
+    client_conversions_files_dir,
+    client_conversions_index_path,
+    client_dir,
 )
 from core.converter import ConversionResult
 
@@ -53,6 +56,67 @@ def _slug(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_") or "fichier"
 
 
+def _migrer_dossier_conversions(client_id: str) -> None:
+    """Renomme « history/ » en « conversions/ » au premier accès, pour que les
+    deux natures de traitement portent le nom de ce qu'elles stockent. Sans
+    effet une fois fait, et sans effet non plus si les deux dossiers coexistent
+    (situation anormale : on ne fusionne rien à l'aveugle, mieux vaut laisser
+    voir qu'écraser)."""
+    base = client_dir(client_id)
+    ancien = os.path.join(base, DOSSIER_CONVERSIONS_AVANT_V11)
+    nouveau = os.path.join(base, DOSSIER_CONVERSIONS)
+    if os.path.isdir(ancien) and not os.path.exists(nouveau):
+        os.rename(ancien, nouveau)
+
+
+def _chemin_relatif(client_id: str, chemin_absolu: str) -> str:
+    """Chemin tel qu'il est ENREGISTRÉ dans le journal : relatif au dossier du
+    client. C'est ce qui rend une sauvegarde restaurable ailleurs — un chemin
+    absolu pointerait vers l'arborescence du serveur d'origine, et les fichiers
+    archivés deviendraient inaccessibles depuis l'interface après restauration
+    sur une machine où l'application n'est pas installée au même endroit."""
+    return os.path.relpath(chemin_absolu, client_dir(client_id)).replace(os.sep, "/")
+
+
+def chemin_fichier(client_id: str, chemin: str | None) -> str | None:
+    """Chemin absolu d'un fichier archivé, à partir de ce que porte le journal.
+
+    Trois cas, tous rencontrés en pratique :
+    - chemin relatif (entrées récentes) : rattaché au dossier actuel du client ;
+    - chemin absolu encore valide (entrées d'avant ce changement, sur la machine
+      d'origine) : conservé tel quel ;
+    - chemin absolu devenu faux (sauvegarde restaurée ailleurs, ou dossier
+      renommé) : ré-ancré sur le dossier actuel du client à partir du segment
+      qui porte son identifiant.
+
+    Renvoie None si le fichier reste introuvable — l'appelant n'affiche alors
+    pas de bouton de téléchargement, plutôt que d'en proposer un qui échoue."""
+    if not chemin:
+        return None
+    base = client_dir(client_id)
+    if not os.path.isabs(chemin):
+        candidat = os.path.join(base, *_normaliser(chemin).split("/"))
+        return candidat if os.path.exists(candidat) else None
+    if os.path.exists(chemin):
+        return chemin
+
+    parties = chemin.replace("\\", "/").split("/")
+    if client_id in parties:
+        queue = _normaliser("/".join(parties[parties.index(client_id) + 1:]))
+        candidat = os.path.join(base, *queue.split("/"))
+        if os.path.exists(candidat):
+            return candidat
+    return None
+
+
+def _normaliser(chemin_relatif: str) -> str:
+    """Rattrape au passage l'ancien nom du dossier des conversions : un journal
+    écrit avant la migration porte « history/files/... »."""
+    if chemin_relatif.startswith(DOSSIER_CONVERSIONS_AVANT_V11 + "/"):
+        return DOSSIER_CONVERSIONS + chemin_relatif[len(DOSSIER_CONVERSIONS_AVANT_V11):]
+    return chemin_relatif
+
+
 def record_conversion(
     client_id: str,
     res: ConversionResult,
@@ -66,7 +130,8 @@ def record_conversion(
     reçu (ou censées recevoir, en cas d'échec) le résultat — uniquement pour
     les conversions issues du fetch automatique ; vide pour un import manuel
     (page Convertisseur), qui ne notifie personne par mail."""
-    files_dir = client_history_files_dir(client_id)
+    _migrer_dossier_conversions(client_id)
+    files_dir = client_conversions_files_dir(client_id)
     os.makedirs(files_dir, exist_ok=True)
 
     conv_id = uuid.uuid4().hex[:12]
@@ -94,8 +159,11 @@ def record_conversion(
         "horodatage": horodatage,
         "point_de_vente": res.point_de_vente,
         "fichier_source_nom": res.source_filename,
-        "fichier_source_chemin": source_path,
-        "fichier_genere_chemin": csv_path,
+        # Relatifs au dossier du client : cf. _chemin_relatif, c'est ce qui rend
+        # une sauvegarde restaurable sur une machine où l'application n'est pas
+        # installée au même endroit.
+        "fichier_source_chemin": _chemin_relatif(client_id, source_path),
+        "fichier_genere_chemin": _chemin_relatif(client_id, csv_path),
         "statut": statut,
         "ca_ht_source": res.ca_ht_source,
         "ca_ht_genere": res.ca_ht_genere,
@@ -114,21 +182,21 @@ def record_conversion(
         "destinataires_email": list(destinataires_email or []),
     }
 
-    _ajouter_au_journal(client_history_index_path(client_id), entree)
+    _ajouter_au_journal(client_id, client_conversions_index_path(client_id), entree)
     return entree
 
 
-def _ajouter_au_journal(index_path: str, entree: dict) -> None:
+def _ajouter_au_journal(client_id: str, index_path: str, entree: dict) -> None:
     """Écriture append-only dans UN journal donné, suivie de sa purge. La
     mécanique est partagée par les conversions et les consolidations ; le
     journal, lui, ne l'est jamais (cf. docstring du module)."""
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
     with open(index_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entree, ensure_ascii=False) + "\n")
-    _purger_journal(index_path)
+    _purger_journal(client_id, index_path)
 
 
-def _purger_journal(index_path: str) -> None:
+def _purger_journal(client_id: str, index_path: str) -> None:
     """Ne conserve que les MAX_HISTORIQUE_CONVERSIONS entrées les plus
     récentes de CE journal : réécrit le fichier sans les plus anciennes et
     supprime leurs fichiers source/générés associés, pour ne pas accumuler
@@ -149,8 +217,9 @@ def _purger_journal(index_path: str) -> None:
         chemins = [e.get("fichier_source_chemin"), e.get("fichier_genere_chemin")]
         chemins += e.get("fichiers_sources_chemins") or []
         for chemin in chemins:
-            if chemin and os.path.exists(chemin):
-                os.remove(chemin)
+            resolu = chemin_fichier(client_id, chemin)
+            if resolu:
+                os.remove(resolu)
 
     with open(index_path, "w", encoding="utf-8") as f:
         # Réécrit du plus ancien au plus récent (ordre naturel d'un journal
@@ -178,7 +247,8 @@ def _lire_journal(index_path: str) -> list[dict]:
 
 def list_history(client_id: str) -> list[dict]:
     """Conversions comptables du client, de la plus récente à la plus ancienne."""
-    return _lire_journal(client_history_index_path(client_id))
+    _migrer_dossier_conversions(client_id)
+    return _lire_journal(client_conversions_index_path(client_id))
 
 
 def list_consolidations(client_id: str) -> list[dict]:
@@ -216,7 +286,7 @@ def record_consolidation(
         chemin = os.path.join(files_dir, f"{base_name}__source__{_slug(nom)}")
         with open(chemin, "wb") as f:
             f.write(contenu)
-        chemins_sources.append(chemin)
+        chemins_sources.append(_chemin_relatif(client_id, chemin))
 
     genere_path = os.path.join(files_dir, f"{base_name}__genere.xlsx")
     with open(genere_path, "wb") as f:
@@ -244,7 +314,7 @@ def record_consolidation(
         # "fichiers_sources_chemins", et c'est elle que la purge nettoie.
         "fichier_source_chemin": chemins_sources[0] if chemins_sources else None,
         "fichiers_sources_chemins": chemins_sources,
-        "fichier_genere_chemin": genere_path,
+        "fichier_genere_chemin": _chemin_relatif(client_id, genere_path),
         "statut": statut,
         "periode": res.periode_libelle,
         "nb_tickets": res.nb_tickets,
@@ -258,7 +328,7 @@ def record_consolidation(
         "destinataires_email": [],
     }
 
-    _ajouter_au_journal(client_consolidation_index_path(client_id), entree)
+    _ajouter_au_journal(client_id, client_consolidation_index_path(client_id), entree)
     return entree
 
 

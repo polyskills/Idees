@@ -235,6 +235,12 @@ Les données comptables des clients vivent dans `LS2PL-Converter\data\clients\`
 place une sauvegarde régulière de ce dossier (copie planifiée, sauvegarde
 Windows Server habituelle, etc.), il n'existe nulle part ailleurs.
 
+Depuis l'application, **Réglages > Sauvegarde > Sauvegarde complète des
+données** produit un ZIP de ce dossier *et* de `data/app_config.json`
+(code d'accès, URL de l'application), avec sa notice de restauration —
+pratique pour une copie ponctuelle avant intervention, sans remplacer une
+sauvegarde planifiée.
+
 ## Sécuriser l'accès
 
 ⚠️ Tel quel, l'application n'a **aucune authentification** : quiconque

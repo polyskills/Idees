@@ -7,11 +7,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 
-from core.client_store import create_client
+from core.client_store import client_consolidation_index_path, client_conversions_index_path, create_client
 from core.converter import ConversionResult
-from core.client_store import client_consolidation_index_path, client_history_index_path
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
+    chemin_fichier,
     echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
     list_consolidations,
@@ -65,10 +65,12 @@ def test_purge_supprime_les_fichiers_des_entrees_purgees():
     premiere = record_conversion(
         client["id"], _res(), source_bytes=b"source", csv_bytes=b"csv", horodatage="2026-01-01 08:00:00"
     )
-    chemin_source = premiere["fichier_source_chemin"]
-    chemin_genere = premiere["fichier_genere_chemin"]
-    assert os.path.exists(chemin_source)
-    assert os.path.exists(chemin_genere)
+    # Le journal ne porte qu'un chemin RELATIF au dossier du client : il faut le
+    # résoudre pour toucher le fichier (cf. chemin_fichier).
+    chemin_source = chemin_fichier(client["id"], premiere["fichier_source_chemin"])
+    chemin_genere = chemin_fichier(client["id"], premiere["fichier_genere_chemin"])
+    assert chemin_source and os.path.exists(chemin_source)
+    assert chemin_genere and os.path.exists(chemin_genere)
 
     _record(client["id"], MAX_HISTORIQUE_CONVERSIONS)  # pousse la première hors fenêtre
 
@@ -152,7 +154,7 @@ def test_deux_journaux_distincts_sur_le_disque():
     _record(client["id"], 3)
     _record_conso(client["id"], 2)
 
-    journal_conv = client_history_index_path(client["id"])
+    journal_conv = client_conversions_index_path(client["id"])
     journal_conso = client_consolidation_index_path(client["id"])
     assert journal_conv != journal_conso
     assert os.path.exists(journal_conv) and os.path.exists(journal_conso)
@@ -189,8 +191,8 @@ def test_les_fichiers_archives_vivent_dans_des_dossiers_separes():
                              horodatage="2026-09-08 10:00:00")
     conso = record_consolidation(client["id"], _synthese(), sources=[("tickets.xls", b"t")],
                                  horodatage="2026-09-08 11:00:00")
-    assert "/history/files/" in conv["fichier_genere_chemin"]
-    assert "/consolidations/files/" in conso["fichier_genere_chemin"]
+    assert conv["fichier_genere_chemin"].startswith("conversions/files/")
+    assert conso["fichier_genere_chemin"].startswith("consolidations/files/")
 
 
 def test_consolidation_archive_tous_ses_rapports_source():
@@ -203,8 +205,8 @@ def test_consolidation_archive_tous_ses_rapports_source():
     )
     chemins = entree["fichiers_sources_chemins"]
     assert len(chemins) == 2
-    assert all(os.path.exists(c) for c in chemins)
-    assert os.path.exists(entree["fichier_genere_chemin"])
+    assert all(chemin_fichier(client["id"], c) for c in chemins)
+    assert chemin_fichier(client["id"], entree["fichier_genere_chemin"])
     # Le champ au singulier reste renseigné : même forme d'entrée que pour une
     # conversion, ce qui garde la mécanique de purge commune aux deux journaux.
     assert entree["fichier_source_chemin"] == chemins[0]
@@ -219,7 +221,7 @@ def test_purge_supprime_aussi_les_rapports_source_au_dela_du_premier():
     _record_conso(client["id"], MAX_HISTORIQUE_CONVERSIONS)  # pousse la première hors fenêtre
 
     for chemin in premiere["fichiers_sources_chemins"] + [premiere["fichier_genere_chemin"]]:
-        assert not os.path.exists(chemin), chemin
+        assert chemin_fichier(client["id"], chemin) is None, chemin
 
 
 def test_statut_consolidation_depend_de_lequilibre_et_des_anomalies():
@@ -237,3 +239,62 @@ def test_statut_consolidation_depend_de_lequilibre_et_des_anomalies():
         client["id"], _synthese(ecart=12.5), sources=[("t.xls", b"t")], horodatage="2026-09-08 12:00:00",
     )
     assert erreur["statut"] == "ERREUR"
+
+
+# --- Portabilité des chemins et migration du dossier ----------------------
+
+
+def test_les_chemins_du_journal_sont_relatifs_au_dossier_client():
+    # C'est ce qui rend une sauvegarde restaurable sur une machine où
+    # l'application n'est pas installée au même endroit.
+    client = create_client("Test Chemins Relatifs")
+    entree = record_conversion(client["id"], _res(), source_bytes=b"s", csv_bytes=b"c",
+                               horodatage="2026-09-10 10:00:00")
+    for cle in ("fichier_source_chemin", "fichier_genere_chemin"):
+        assert not os.path.isabs(entree[cle]), entree[cle]
+        assert entree[cle].startswith("conversions/files/")
+
+
+def test_un_chemin_absolu_herite_est_re_ancre_sur_le_dossier_actuel():
+    # Reproduit une sauvegarde restaurée ailleurs : le journal porte encore le
+    # chemin absolu de la machine d'origine, le fichier est bien là mais sous
+    # une autre racine.
+    client = create_client("Test Re Ancrage")
+    entree = record_conversion(client["id"], _res(), source_bytes=b"s", csv_bytes=b"c",
+                               horodatage="2026-09-10 10:00:00")
+    ancien = f"/ancien/serveur/data/clients/{client['id']}/{entree['fichier_genere_chemin']}"
+    resolu = chemin_fichier(client["id"], ancien)
+    assert resolu is not None and os.path.exists(resolu)
+
+
+def test_un_chemin_introuvable_ne_renvoie_rien():
+    client = create_client("Test Introuvable")
+    assert chemin_fichier(client["id"], "conversions/files/inexistant.csv") is None
+    assert chemin_fichier(client["id"], None) is None
+
+
+def test_le_dossier_history_est_migre_vers_conversions():
+    # Installation antérieure : les données vivaient dans history/.
+    client = create_client("Test Migration")
+    record_conversion(client["id"], _res(), source_bytes=b"s", csv_bytes=b"c",
+                      horodatage="2026-09-10 10:00:00")
+    import shutil
+    base = os.path.dirname(client_conversions_index_path(client["id"]))
+    ancien = os.path.join(os.path.dirname(base), "history")
+    shutil.move(base, ancien)
+    assert not os.path.exists(base)
+
+    entrees = list_history(client["id"])          # déclenche la migration
+    assert os.path.isdir(base) and not os.path.exists(ancien)
+    assert len(entrees) == 1
+    # Et le fichier archivé reste atteignable
+    assert chemin_fichier(client["id"], entrees[0]["fichier_genere_chemin"])
+
+
+def test_un_journal_ecrit_avant_le_renommage_reste_lisible():
+    # Entrée portant « history/files/... » : le chemin doit être rattrapé.
+    client = create_client("Test Ancien Libelle")
+    entree = record_conversion(client["id"], _res(), source_bytes=b"s", csv_bytes=b"c",
+                               horodatage="2026-09-10 10:00:00")
+    ancien_libelle = entree["fichier_genere_chemin"].replace("conversions/", "history/", 1)
+    assert chemin_fichier(client["id"], ancien_libelle)

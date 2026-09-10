@@ -3,11 +3,15 @@ Registre des clients (mode multi-client / SaaS interne).
 
 Chaque client dispose de son propre espace isolé sous data/clients/<id>/ :
 - mappings.json               : ses tables de correspondance (voir mapping_store.py)
-- history/index.jsonl         : journal append-only de ses conversions comptables
-- history/files/              : fichiers source et générés de ces conversions
+- conversions/index.jsonl     : journal append-only de ses conversions comptables
+- conversions/files/          : fichiers source et générés de ces conversions
 - consolidations/index.jsonl  : journal append-only de ses consolidations de CA
 - consolidations/files/       : rapports source et classeurs de ces consolidations
 - consolidations/en_attente/  : rapports reçus par mail en attente de leur binôme
+
+Le dossier des conversions s'appelait « history/ » jusqu'à la v1.1 : les deux
+natures de traitement portent désormais le nom de ce qu'elles stockent, au
+pluriel. La migration est automatique (cf. core.history_store).
 
 Conversion comptable et consolidation sont deux besoins distincts : elles ont
 donc chacune leur journal et leur dossier de fichiers, jamais un stockage
@@ -166,23 +170,31 @@ def client_mappings_path(client_id: str) -> str:
     return os.path.join(client_dir(client_id), "mappings.json")
 
 
-def client_history_index_path(client_id: str) -> str:
-    return os.path.join(client_dir(client_id), "history", "index.jsonl")
+# Nom historique du dossier des conversions, migré au premier accès (cf.
+# core.history_store) : conservé ici pour que la migration ait une seule
+# source de vérité.
+DOSSIER_CONVERSIONS_AVANT_V11 = "history"
+DOSSIER_CONVERSIONS = "conversions"
+DOSSIER_CONSOLIDATIONS = "consolidations"
 
 
-def client_history_files_dir(client_id: str) -> str:
-    return os.path.join(client_dir(client_id), "history", "files")
+def client_conversions_index_path(client_id: str) -> str:
+    return os.path.join(client_dir(client_id), DOSSIER_CONVERSIONS, "index.jsonl")
+
+
+def client_conversions_files_dir(client_id: str) -> str:
+    return os.path.join(client_dir(client_id), DOSSIER_CONVERSIONS, "files")
 
 
 # Consolidations : mêmes conventions, arborescence séparée (cf. docstring du
 # module). delete_client() supprime l'espace complet du client, ces dossiers
 # sont donc couverts sans traitement particulier.
 def client_consolidation_index_path(client_id: str) -> str:
-    return os.path.join(client_dir(client_id), "consolidations", "index.jsonl")
+    return os.path.join(client_dir(client_id), DOSSIER_CONSOLIDATIONS, "index.jsonl")
 
 
 def client_consolidation_files_dir(client_id: str) -> str:
-    return os.path.join(client_dir(client_id), "consolidations", "files")
+    return os.path.join(client_dir(client_id), DOSSIER_CONSOLIDATIONS, "files")
 
 
 def client_consolidation_sas_dir(client_id: str) -> str:
@@ -190,4 +202,4 @@ def client_consolidation_sas_dir(client_id: str) -> str:
     y patiente jusqu'à l'arrivée de son binôme (Tickets attend Transactions et
     réciproquement), les deux arrivant dans des messages distincts. Vidé dès
     que la paire est traitée — cf. core.consolidation_sas."""
-    return os.path.join(client_dir(client_id), "consolidations", "en_attente")
+    return os.path.join(client_dir(client_id), DOSSIER_CONSOLIDATIONS, "en_attente")

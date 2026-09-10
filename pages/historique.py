@@ -13,6 +13,7 @@ import streamlit as st
 
 from core.history_store import (
     MAX_HISTORIQUE_CONVERSIONS,
+    chemin_fichier,
     echecs_apres_derniere_reussite,
     jours_depuis_derniere_conversion_reussie,
     list_history,
@@ -133,8 +134,12 @@ with st.container(key="liste_historique"):
                 st.success("Aucune anomalie relevée sur cette conversion.")
 
             dl1, dl2 = st.columns(2)
-            src_path = e.get("fichier_source_chemin")
-            if src_path and os.path.exists(src_path):
+            # Le journal porte un chemin relatif au dossier du client (et, pour
+            # les entrées anciennes, un chemin absolu éventuellement devenu faux
+            # après restauration d'une sauvegarde ailleurs) : chemin_fichier
+            # tranche les deux cas.
+            src_path = chemin_fichier(client_id, e.get("fichier_source_chemin"))
+            if src_path:
                 with open(src_path, "rb") as f:
                     dl1.download_button(
                         "⬇️ Fichier source LightSpeed",
@@ -142,8 +147,8 @@ with st.container(key="liste_historique"):
                         file_name=e["fichier_source_nom"],
                         key=f"src_{e['id']}",
                     )
-            gen_path = e.get("fichier_genere_chemin")
-            if gen_path and os.path.exists(gen_path):
+            gen_path = chemin_fichier(client_id, e.get("fichier_genere_chemin"))
+            if gen_path:
                 with open(gen_path, "rb") as f:
                     dl2.download_button(
                         "⬇️ Fichier Pennylane généré (.csv)",
