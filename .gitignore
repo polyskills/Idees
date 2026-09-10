@@ -12,6 +12,10 @@ data/clients/
 # latéral) : état d'exécution, pas du code — jamais versionné non plus.
 data/app_config.json
 
+# Sentinelle de redémarrage du service de fetch mail, posée par la mise à jour
+# depuis l'interface (cf. core/self_update.py) : état d'exécution éphémère.
+data/.fetch_mail_restart_requested
+
 # Déploiement Windows : binaire NSSM téléchargé à l'installation, et logs
 # du service — jamais versionnés.
 deploy/windows/tools/

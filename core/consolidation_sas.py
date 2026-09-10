@@ -24,6 +24,10 @@ Arborescence, sous data/clients/<id>/consolidations/en_attente/<cle>/ :
     tickets.<ext>           contenu brut du rapport, tel que reçu
     transactions.<ext>
 
+etat.json ne retient que le NOM des fichiers, jamais leur chemin complet : le
+dossier se reconstruit à partir de (client, clé), et une sauvegarde restaurée
+sur une autre machine reste donc exploitable.
+
 Deux garde-fous temporels :
 - DELAI_ALERTE_HEURES : au-delà, un rapport resté seul devient un incident
   signalé (un export cassé côté Lightspeed ne doit pas passer inaperçu) ;
@@ -70,6 +74,30 @@ def cle_appariement(code_pdv: str, date_debut: str | None, date_fin: str | None)
 
 def _dossier(client_id: str, cle: str) -> str:
     return os.path.join(client_consolidation_sas_dir(client_id), cle)
+
+
+def chemin_rapport(client_id: str, cle: str, infos: dict) -> str | None:
+    """Chemin absolu du fichier d'un rapport en attente.
+
+    Le sas n'enregistre que le NOM du fichier : son dossier est entièrement
+    déterminé par (client, clé d'appariement), donc reconstructible. Y stocker
+    un chemin absolu le rendrait faux dès qu'une sauvegarde est restaurée
+    ailleurs — la paire resterait complète mais illisible, et la consolidation
+    ne se déclencherait jamais (même raison qu'en historique, cf.
+    core.history_store.chemin_fichier).
+
+    Un état écrit avant ce changement porte un chemin absolu : on tente
+    d'abord le chemin reconstruit, valable dans tous les cas, puis l'ancien
+    s'il existe encore. None si le fichier reste introuvable."""
+    stocke = infos.get("chemin") or ""
+    if not stocke:
+        return None
+    candidat = os.path.join(_dossier(client_id, cle), os.path.basename(stocke))
+    if os.path.exists(candidat):
+        return candidat
+    if os.path.isabs(stocke) and os.path.exists(stocke):
+        return stocke
+    return None
 
 
 def _chemin_etat(client_id: str, cle: str) -> str:
@@ -130,12 +158,15 @@ def deposer(
         f.write(contenu)
 
     ancien = etat["rapports"].get(type_rapport)
-    if ancien and ancien.get("chemin") and ancien["chemin"] != chemin and os.path.exists(ancien["chemin"]):
-        os.remove(ancien["chemin"])  # extension différente : ne pas laisser l'ancien fichier derrière
+    if ancien:
+        ancien_chemin = chemin_rapport(client_id, cle, ancien)
+        if ancien_chemin and os.path.abspath(ancien_chemin) != os.path.abspath(chemin):
+            os.remove(ancien_chemin)  # extension différente : ne pas laisser l'ancien fichier derrière
 
     etat["rapports"][type_rapport] = {
         "nom_fichier": nom_fichier,
-        "chemin": chemin,
+        # Nom seul, jamais le chemin complet : cf. chemin_rapport.
+        "chemin": os.path.basename(chemin),
         "horodatage": horodatage,
         "adresses_notification": list(adresses_notification or []),
         "remplace": bool(ancien),
@@ -158,9 +189,10 @@ def charger_paire(client_id: str, cle: str) -> tuple[list, list] | None:
     contenus = {}
     for type_rapport in TYPES_RAPPORTS:
         infos = etat["rapports"][type_rapport]
-        if not os.path.exists(infos["chemin"]):
+        chemin = chemin_rapport(client_id, cle, infos)
+        if chemin is None:
             return None
-        with open(infos["chemin"], "rb") as f:
+        with open(chemin, "rb") as f:
             contenus[type_rapport] = [(infos["nom_fichier"], f.read())]
     return contenus[TYPE_TICKETS], contenus[TYPE_TRANSACTIONS]
 

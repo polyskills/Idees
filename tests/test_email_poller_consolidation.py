@@ -198,3 +198,45 @@ def test_orphelin_signale_une_seule_fois_apres_le_delai():
     assert signaler_orphelins(graph, "boite@client.example.com", client["id"]) == 0
     # Et le rapport reçu est conservé : un envoi tardif complétera la paire.
     assert len(consolidation_sas.lister(client["id"])) == 1
+
+
+def test_le_sas_reste_exploitable_apres_restauration_ailleurs(tmp_path, monkeypatch):
+    # Une sauvegarde prise alors qu'un rapport attend son binôme, restaurée sur
+    # une machine où l'application n'est pas installée au même endroit : la
+    # paire doit se compléter normalement. Un chemin absolu dans etat.json
+    # laissait la paire complète mais illisible, sans consolidation possible.
+    import shutil
+    from core import client_store
+
+    client = _client_avec_consolidation()
+    tickets, transactions = _fichiers()
+    graph = FakeGraph()
+    graph.messages = [_message("m1", tickets)]
+    traiter_client(graph, client)
+
+    ancienne_racine = client_store.CLIENTS_DIR
+    nouvelle_racine = str(tmp_path / "autre_serveur" / "clients")
+    shutil.copytree(ancienne_racine, nouvelle_racine)
+    shutil.rmtree(ancienne_racine)
+    monkeypatch.setattr(client_store, "CLIENTS_DIR", nouvelle_racine)
+    monkeypatch.setattr(client_store, "CLIENTS_INDEX", os.path.join(nouvelle_racine, "index.json"))
+
+    assert len(consolidation_sas.lister(client["id"])) == 1   # l'attente a survécu
+
+    graph.messages = [_message("m2", transactions)]
+    traiter_client(graph, client)
+
+    assert len(list_consolidations(client["id"])) == 1
+    assert consolidation_sas.lister(client["id"]) == []
+
+
+def test_le_sas_nenregistre_que_le_nom_des_fichiers():
+    client = _client_avec_consolidation()
+    tickets, _ = _fichiers()
+    graph = FakeGraph()
+    graph.messages = [_message("m1", tickets)]
+    traiter_client(graph, client)
+
+    infos = consolidation_sas.lister(client["id"])[0]["rapports"]["tickets"]
+    assert infos["chemin"] == "tickets.xlsx"
+    assert not os.path.isabs(infos["chemin"])
