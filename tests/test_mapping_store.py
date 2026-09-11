@@ -31,11 +31,15 @@ def test_build_export_global_xlsx_un_onglet_par_table():
         "Moyens paiement ignorés",
         "Taux de TVA",
         "Attribution analytique",
+        "Paramètres généraux",
     ]
     ws = wb["Points de vente"]
     rows = list(ws.iter_rows(values_only=True))
-    assert rows[0] == ("code", "libelle", "code_journal", "site_consolidation",
-                       "adresse_email", "adresse_email_consolidation", "adresse_resultat", "commentaires")
+    # En-têtes lisibles, pas les clés de stockage : ce classeur est fait pour
+    # être lu et transmis, jamais relu par l'application.
+    assert rows[0] == ("Code point de vente", "Libellé", "Code journal", "Site de consolidation",
+                       "Adresse mail de réception", "Adresse mail de consolidation",
+                       "Adresse mail de résultat", "Commentaires")
     assert rows[1][:2] == ("REST", "Restaurant")
 
 
@@ -44,7 +48,7 @@ def test_build_export_global_xlsx_tables_vides_gardent_les_colonnes():
     wb = openpyxl.load_workbook(io.BytesIO(contenu))
     ws = wb["Taux de TVA"]
     rows = list(ws.iter_rows(values_only=True))
-    assert rows == [("taux", "compte", "libelle_compte", "commentaires")]  # en-tête seul, table vide
+    assert rows == [("Taux de TVA", "Compte de TVA collectée", "Libellé du compte", "Commentaires")]  # en-tête seul, table vide
 
 
 def test_build_export_global_xlsx_departements_affiche_compte_avec_libelle():
@@ -61,7 +65,8 @@ def test_build_export_global_xlsx_departements_affiche_compte_avec_libelle():
     wb = openpyxl.load_workbook(io.BytesIO(contenu))
     ws = wb["Départements LS"]
     rows = list(ws.iter_rows(values_only=True))
-    assert rows[0] == ("categorie_lightspeed", "compte", "taux_tva", "commentaires")
+    assert rows[0] == ("Département LightSpeed", "Compte de vente", "Taux TVA nominal",
+                       "Attribution analytique", "Commentaires")
     assert rows[1][1] == "70110010 - VENTES SOLIDE TVA 10%"
 
 
@@ -122,6 +127,13 @@ def test_build_export_global_xlsx_attribution_analytique_groupee_pas_eclatee():
         **EMPTY_MAPPINGS,
         "comptes_de_vente": [{"compte": "70110010", "libelle_compte": "Ventes solides", "commentaires": ""}],
         "codes_analytiques": [{"code_analytique": "REST", "description": "Restaurant", "commentaires": ""}],
+        # Départements déclarés : sans eux ils seraient préfixés d'un ⚠️
+        # (cf. le test du marquage, plus bas).
+        "departements": [
+            {"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Cuisine - Plat", "compte": "70110010", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Cuisine - Dessert", "compte": "70110010", "taux_tva": "10%"},
+        ],
         "comptes_analytiques": [
             {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
              "famille": "POINT_DE_VENTE", "code_analytique": "REST", "commentaires": ""},
@@ -136,7 +148,7 @@ def test_build_export_global_xlsx_attribution_analytique_groupee_pas_eclatee():
     ws = wb["Attribution analytique"]
     rows = list(ws.iter_rows(values_only=True))
 
-    assert rows[0] == ("point_de_vente", "compte", "code_analytique", "famille", "departements")
+    assert rows[0] == ("Point de vente", "Compte", "Code analytique", "Famille", "Départements")
     assert len(rows) == 2  # en-tête + UNE seule ligne pour le groupe (pas 3)
     assert rows[1][0] == "REST"
     assert rows[1][1] == "70110010 - Ventes solides"
@@ -267,3 +279,77 @@ def test_export_global_xlsx_exporte_le_code_journal_du_pdv():
     wb = openpyxl.load_workbook(io.BytesIO(build_export_global_xlsx(mappings)))
     rows = list(wb["Points de vente"].iter_rows(values_only=True))
     assert rows[1][:3] == ("BAR", "BAR", "VTBAR")
+
+
+# --- Écarts constatés entre le classeur .xlsx et les exports CSV par onglet --
+#
+# Le CSV d'un onglet exporte ce qui est affiché à l'écran ; le classeur, lui,
+# était construit séparément et avait divergé. Les libellés de colonnes sont
+# désormais une source unique (LIBELLES_COLONNES), partagée par les deux.
+
+
+def _mappings_avec_departement_non_attribue() -> dict:
+    return {
+        **EMPTY_MAPPINGS,
+        "comptes_de_vente": [{"compte": "70110010", "libelle_compte": "Ventes solides"}],
+        "codes_analytiques": [{"code_analytique": "REST", "description": "Restaurant"}],
+        "departements": [
+            {"categorie_lightspeed": "Cuisine - Entrée", "compte": "70110010", "taux_tva": "10%"},
+            {"categorie_lightspeed": "Softs", "compte": "70110010", "taux_tva": "10%"},
+        ],
+        "comptes_analytiques": [
+            {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisine - Entrée",
+             "famille": "POINT_DE_VENTE", "code_analytique": "REST"},
+        ],
+    }
+
+
+def _feuille(mappings: dict, nom: str) -> list[tuple]:
+    wb = openpyxl.load_workbook(io.BytesIO(build_export_global_xlsx(mappings)))
+    return list(wb[nom].iter_rows(values_only=True))
+
+
+def test_departements_exportent_la_colonne_attribution_analytique():
+    # Écart rapporté : la colonne « Attribution analytique » figurait dans le
+    # CSV de l'onglet Départements LS mais pas dans le classeur, alors que
+    # c'est elle qui signale un département qui bloquera la conversion.
+    rows = _feuille(_mappings_avec_departement_non_attribue(), "Départements LS")
+    assert rows[0][3] == "Attribution analytique"
+    par_departement = {r[0]: r[3] for r in rows[1:]}
+    assert par_departement["Cuisine - Entrée"] == "✅"
+    assert par_departement["Softs"] == "⚠️ aucune attribution"
+
+
+def test_attribution_signale_un_departement_inconnu():
+    # Un département absent de « Départements LS » est préfixé d'un ⚠️ à
+    # l'écran : c'est le signal d'une faute de frappe, et le classeur le
+    # perdait — donc perdait l'information qu'on vient y vérifier.
+    mappings = _mappings_avec_departement_non_attribue()
+    mappings["comptes_analytiques"].append(
+        {"point_de_vente": "REST", "compte": "70110010", "categorie_lightspeed": "Cuisinne - Plat",
+         "famille": "POINT_DE_VENTE", "code_analytique": "REST"}
+    )
+    rows = _feuille(mappings, "Attribution analytique")
+    departements = rows[1][4]
+    assert "⚠️ Cuisinne - Plat" in departements     # faute de frappe signalée
+    assert "⚠️ Cuisine - Entrée" not in departements  # celui-ci est connu
+
+
+def test_feuille_parametres_generaux():
+    # Dixième table du référentiel, absente du classeur jusqu'ici : archiver
+    # l'export ne permettait pas de relire le code journal par défaut ni le
+    # compte d'écart.
+    rows = _feuille(EMPTY_MAPPINGS, "Paramètres généraux")
+    assert rows[0] == ("Paramètre", "Valeur")
+    valeurs = {r[0]: r[1] for r in rows[1:]}
+    assert valeurs["Code journal par défaut"] == "VT"
+    assert valeurs["Compte d'écart / report (équilibrage)"] == "471000"
+    assert valeurs["Tolérance de rapprochement du report (€)"] == 0.02
+
+
+def test_un_parametre_hors_nomenclature_reste_exporte():
+    # Un paramètre ajouté au référentiel sans libellé déclaré doit apparaître
+    # sous sa clé technique plutôt que de disparaître silencieusement.
+    mappings = {**EMPTY_MAPPINGS, "parametres": {**EMPTY_MAPPINGS["parametres"], "reglage_futur": "valeur"}}
+    valeurs = {r[0]: r[1] for r in _feuille(mappings, "Paramètres généraux")[1:]}
+    assert valeurs["reglage_futur"] == "valeur"

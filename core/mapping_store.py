@@ -456,8 +456,129 @@ _TABLES_EXPORT_GLOBAL = [
     ("Taux de TVA", "comptes_tva", ["taux", "compte", "libelle_compte", "commentaires"]),
 ]
 
-_COLONNES_DEPARTEMENTS = ["categorie_lightspeed", "compte", "taux_tva", "commentaires"]
+_COLONNES_DEPARTEMENTS = ["categorie_lightspeed", "compte", "taux_tva", "affecte", "commentaires"]
 _COLONNES_ATTRIBUTION_ANALYTIQUE = ["point_de_vente", "compte", "code_analytique", "famille", "departements"]
+_COLONNES_PARAMETRES = ["parametre", "valeur"]
+
+# Libellé affiché de chaque colonne, par table. SOURCE UNIQUE pour l'écran
+# (sélecteur de tri, en-têtes de tableau) comme pour les exports (.csv par
+# onglet et .xlsx global) : c'est justement la divergence entre les deux qui
+# avait fait disparaître la colonne « Attribution analytique » du classeur,
+# alors qu'elle figurait bien dans le CSV du même onglet. Une clé porte un
+# libellé différent selon la table (« compte » = compte de vente ici, compte
+# de contrepartie ailleurs), d'où le découpage par table plutôt qu'un
+# dictionnaire global.
+LIBELLES_COLONNES = {
+    "points_de_vente": {
+        "code": "Code point de vente",
+        "libelle": "Libellé",
+        "code_journal": "Code journal",
+        "site_consolidation": "Site de consolidation",
+        "adresse_email": "Adresse mail de réception",
+        "adresse_email_consolidation": "Adresse mail de consolidation",
+        "adresse_resultat": "Adresse mail de résultat",
+        "commentaires": "Commentaires",
+    },
+    "comptes_de_vente": {
+        "compte": "Compte",
+        "libelle_compte": "Libellé du compte",
+        "commentaires": "Commentaires",
+    },
+    "codes_analytiques": {
+        "code_analytique": "Code analytique",
+        "description": "Description",
+        "commentaires": "Commentaires",
+    },
+    "departements": {
+        "categorie_lightspeed": "Département LightSpeed",
+        "compte": "Compte de vente",
+        "taux_tva": "Taux TVA nominal",
+        "affecte": "Attribution analytique",
+        "commentaires": "Commentaires",
+    },
+    "comptes_paiement": {
+        "point_de_vente": "Point de vente",
+        "mode_paiement": "Mode de paiement LightSpeed",
+        "compte": "Compte de contrepartie",
+        "libelle_compte": "Libellé du compte",
+        "commentaires": "Commentaires",
+    },
+    "comptes_pourboires": {
+        "point_de_vente": "Point de vente",
+        "mode_paiement": "Mode de paiement LightSpeed",
+        "compte": "Compte crédité du pourboire",
+        "libelle_compte": "Libellé du compte",
+        "commentaires": "Commentaires",
+    },
+    "modes_paiement_ignores": {
+        "mode_paiement": "Mode de paiement à ignorer",
+        "commentaires": "Commentaires",
+    },
+    "comptes_tva": {
+        "taux": "Taux de TVA",
+        "compte": "Compte de TVA collectée",
+        "libelle_compte": "Libellé du compte",
+        "commentaires": "Commentaires",
+    },
+    "comptes_analytiques": {
+        "point_de_vente": "Point de vente",
+        "compte": "Compte",
+        "code_analytique": "Code analytique",
+        "famille": "Famille",
+        "departements": "Départements",
+    },
+    "parametres": {
+        "parametre": "Paramètre",
+        "valeur": "Valeur",
+    },
+}
+
+# Libellé lisible de chaque paramètre général, pour la feuille dédiée.
+LIBELLES_PARAMETRES = {
+    "code_journal": "Code journal par défaut",
+    "code_pays": "Code pays du compte",
+    "devise": "Devise",
+    "famille_categorie_analytique": "Famille analytique par défaut",
+    "compte_ecart": "Compte d'écart / report (équilibrage)",
+    "libelle_compte_ecart": "Libellé du compte d'écart",
+    "tolerance_equilibrage": "Tolérance de rapprochement du report (€)",
+}
+
+
+def departements_affectes(mappings: dict) -> set[str]:
+    """Départements rattachés à au moins une ligne d'attribution analytique,
+    tous points de vente et comptes confondus. Purement informatif, jamais
+    enregistré : sert à repérer d'un coup d'œil un département orphelin, à
+    l'écran comme à l'export."""
+    return {
+        (a.get("categorie_lightspeed") or "").strip().casefold()
+        for a in mappings.get("comptes_analytiques", [])
+        if a.get("categorie_lightspeed")
+    }
+
+
+def etat_attribution(categorie: str, affectes: set[str]) -> str:
+    return "✅" if (categorie or "").strip().casefold() in affectes else "⚠️ aucune attribution"
+
+
+def departements_connus(mappings: dict) -> set[str]:
+    """Départements déclarés dans « Départements LS », en clés normalisées.
+    Sert à repérer, dans une attribution analytique, un département qui n'y
+    figure pas — presque toujours une faute de frappe."""
+    return {(d.get("categorie_lightspeed") or "").strip().casefold()
+            for d in mappings.get("departements", []) if d.get("categorie_lightspeed")}
+
+
+def marquer_departements_inconnus(departements: list[str], mappings: dict) -> str:
+    """Départements d'un groupe d'attribution, joints en une cellule, ceux
+    absents de « Départements LS » préfixés de ⚠️ — probable faute de frappe.
+    Ce marqueur est la seule façon de repérer l'erreur : l'export qui le
+    perdait perdait donc l'information qu'on vient y chercher."""
+    connus = departements_connus(mappings)
+    parties = []
+    for d in sorted((x for x in departements if x), key=str.casefold):
+        parties.append(d if d.strip().casefold() in connus else f"⚠️ {d}")
+    return ", ".join(parties)
 
 # Largeur de colonne (caractères) au-delà de laquelle le contenu passe en
 # renvoi à la ligne plutôt que de continuer à élargir la colonne indéfiniment.
@@ -486,11 +607,16 @@ def _lignes_departements(mappings: dict) -> list[dict]:
     que le code ; sans ce rapprochement, l'export perdrait le libellé
     pourtant visible à l'écran."""
     comptes_de_vente = mappings.get("comptes_de_vente", [])
+    affectes = departements_affectes(mappings)
     return [
         {
             "categorie_lightspeed": d.get("categorie_lightspeed", ""),
             "compte": _affichage_code_libelle(d.get("compte", ""), comptes_de_vente, "compte", "libelle_compte"),
             "taux_tva": d.get("taux_tva", ""),
+            # Même indicateur qu'à l'écran : un département sans attribution
+            # analytique bloquera la conversion, c'est ce qu'on vient vérifier
+            # en relisant l'export.
+            "affecte": etat_attribution(d.get("categorie_lightspeed", ""), affectes),
             "commentaires": d.get("commentaires", ""),
         }
         for d in mappings.get("departements", [])
@@ -520,10 +646,32 @@ def _groupes_attribution_analytique(mappings: dict) -> list[dict]:
             # n'est qu'un complément optionnel, pas concaténée ici.
             "code_analytique": code,
             "famille": famille,
-            "departements": ", ".join(sorted((d for d in deps if d), key=str.casefold)),
+            "departements": marquer_departements_inconnus(deps, mappings),
         }
         for (pdv, compte, code, famille), deps in sorted(groupes.items())
     ]
+
+
+def _lignes_parametres(mappings: dict) -> list[dict]:
+    """Paramètres généraux en deux colonnes (paramètre, valeur). Ils font
+    partie du référentiel au même titre que les tables, et manquaient
+    jusqu'ici au classeur : quelqu'un qui l'archive pour relire un
+    paramétrage n'y trouvait ni le code journal par défaut, ni le compte
+    d'écart."""
+    params = mappings.get("parametres", {}) or {}
+    lignes = [
+        {"parametre": libelle, "valeur": params.get(cle, "")}
+        for cle, libelle in LIBELLES_PARAMETRES.items()
+    ]
+    # Un paramètre ajouté au référentiel sans passer par LIBELLES_PARAMETRES
+    # reste exporté sous sa clé technique, plutôt que d'être silencieusement
+    # absent du classeur.
+    lignes += [
+        {"parametre": cle, "valeur": valeur}
+        for cle, valeur in params.items()
+        if cle not in LIBELLES_PARAMETRES
+    ]
+    return lignes
 
 
 def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
@@ -550,8 +698,12 @@ def _ajuster_largeurs_colonnes(ws, df: pd.DataFrame) -> None:
                 cell.alignment = Alignment(wrap_text=True, vertical="top")
 
 
-def _ecrire_feuille(writer, nom_feuille: str, rows: list[dict], colonnes: list[str]) -> None:
+def _ecrire_feuille(writer, nom_feuille: str, rows: list[dict], colonnes: list[str], cle_table: str) -> None:
     df = pd.DataFrame(rows).reindex(columns=colonnes).fillna("") if rows else pd.DataFrame(columns=colonnes)
+    # En-têtes lisibles plutôt que les clés de stockage : ce classeur est fait
+    # pour être lu et transmis, pas relu par l'application (la restauration
+    # passe par le .json de sauvegarde).
+    df = df.rename(columns=LIBELLES_COLONNES.get(cle_table, {}))
     nom = nom_feuille[:31]  # Excel limite un nom d'onglet à 31 caractères
     df.to_excel(writer, sheet_name=nom, index=False)
     _ajuster_largeurs_colonnes(writer.sheets[nom], df)
@@ -562,21 +714,30 @@ def build_export_global_xlsx(mappings: dict) -> bytes:
     référentiel **enregistré** (contrairement aux exports CSV par onglet de
     la page Table de correspondance, qui reflètent l'état affiché à l'écran,
     y compris non enregistré) — pratique pour un export complet en un clic
-    (archivage, envoi à un tiers), sans télécharger 8 CSV séparés. Utilisé
-    depuis la page Réglages > Sauvegarde. Largeur de colonnes ajustée au
-    contenu de chaque onglet. Ordre des onglets identique à celui de la
-    page Table de correspondance."""
+    (archivage, envoi à un tiers), sans télécharger les onglets un par un.
+    Utilisé depuis la page Réglages > Sauvegarde. Largeur de colonnes ajustée
+    au contenu de chaque onglet. Ordre des onglets identique à celui de la
+    page Table de correspondance, suivi des paramètres généraux.
+
+    Le classeur reproduit ce qui est affiché à l'écran, indicateurs compris :
+    la colonne « Attribution analytique » des départements, et les ⚠️ des
+    départements introuvables dans les attributions. Construit séparément des
+    exports CSV, il avait divergé sur ces deux points — d'où LIBELLES_COLONNES
+    et les helpers partagés, qui en font désormais une seule et même source."""
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL[:3]:  # Points de vente, Comptes de vente PL, Codes Analytique PL
-            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes)
+            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes, cle_mappings)
 
-        _ecrire_feuille(writer, "Départements LS", _lignes_departements(mappings), _COLONNES_DEPARTEMENTS)
+        _ecrire_feuille(writer, "Départements LS", _lignes_departements(mappings),
+                        _COLONNES_DEPARTEMENTS, "departements")
 
         for nom_feuille, cle_mappings, colonnes in _TABLES_EXPORT_GLOBAL[3:]:  # Moyens de paiements, ignorés, Taux de TVA
-            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes)
+            _ecrire_feuille(writer, nom_feuille, mappings.get(cle_mappings, []), colonnes, cle_mappings)
 
-        _ecrire_feuille(
-            writer, "Attribution analytique", _groupes_attribution_analytique(mappings), _COLONNES_ATTRIBUTION_ANALYTIQUE
-        )
+        _ecrire_feuille(writer, "Attribution analytique", _groupes_attribution_analytique(mappings),
+                        _COLONNES_ATTRIBUTION_ANALYTIQUE, "comptes_analytiques")
+
+        _ecrire_feuille(writer, "Paramètres généraux", _lignes_parametres(mappings),
+                        _COLONNES_PARAMETRES, "parametres")
     return buf.getvalue()

@@ -11,7 +11,18 @@ import streamlit as st
 
 from core.client_store import get_client
 from core.lightspeed_synthese import SITES
-from core.mapping_store import TOUS_POINTS_DE_VENTE, load_mappings, reset_to_empty, save_mappings, seed_with_examples
+from core.mapping_store import (
+    LIBELLES_COLONNES,
+    TOUS_POINTS_DE_VENTE,
+    departements_affectes,
+    departements_connus,
+    etat_attribution,
+    load_mappings,
+    marquer_departements_inconnus,
+    reset_to_empty,
+    save_mappings,
+    seed_with_examples,
+)
 from core.timezone import now_local
 from core.ui_common import select_client
 
@@ -80,13 +91,22 @@ def _csv_bytes(df: pd.DataFrame) -> bytes:
     return ("﻿" + buf.getvalue()).encode("utf-8")
 
 
-def _bouton_export_csv(df: pd.DataFrame, client_id: str, onglet_slug: str, onglet_libelle: str, key: str) -> None:
+def _bouton_export_csv(df: pd.DataFrame, client_id: str, onglet_slug: str, onglet_libelle: str, key: str,
+                       cle_table: str | None = None) -> None:
     """Bouton de téléchargement CSV d'un onglet, avec un nom de fichier qui
     précise le client et l'onglet d'origine : sans ça, plusieurs exports
     successifs (un par onglet, ou pour des clients différents) deviennent
     impossibles à distinguer une fois dans le dossier de téléchargements.
     Exporte le contenu **actuellement affiché** dans le tableau, y compris
-    d'éventuelles modifications pas encore enregistrées."""
+    d'éventuelles modifications pas encore enregistrées.
+
+    `cle_table` donne les libellés de colonnes à écrire en en-tête, les mêmes
+    que le classeur .xlsx global (LIBELLES_COLONNES) : sans ça, le CSV porte
+    les clés de stockage (`categorie_lightspeed`, `adresse_email_consolidation`)
+    alors qu'il est destiné à être lu. Omis quand le tableau affiché porte
+    déjà ses libellés, comme celui des attributions analytiques."""
+    if cle_table:
+        df = df.rename(columns=LIBELLES_COLONNES.get(cle_table, {}))
     horodatage = now_local().strftime("%Y%m%d_%H%M%S")
     st.download_button(
         f"⬇️ Exporter « {onglet_libelle} » en CSV",
@@ -205,16 +225,7 @@ with tab_pdv:
         "destinataires possibles, séparés par une virgule ou un point-virgule."
     )
     tri_pdv, decroissant_pdv = _selecteur_tri(
-        {
-            "code": "Code point de vente",
-            "libelle": "Libellé",
-            "code_journal": "Code journal",
-            "site_consolidation": "Site de consolidation",
-            "adresse_email": "Adresse mail de réception",
-            "adresse_email_consolidation": "Adresse mail de consolidation",
-            "adresse_resultat": "Adresse mail de résultat",
-            "commentaires": "Commentaires",
-        },
+        LIBELLES_COLONNES["points_de_vente"],
         defaut="code",
         cle="pdv",
     )
@@ -265,7 +276,7 @@ with tab_pdv:
         },
     )
     edited_pdv = edited_pdv_df.dropna(how="all").fillna("").to_dict("records")
-    _bouton_export_csv(edited_pdv_df, client_id, "points_de_vente", "Points de vente", key="export_pdv")
+    _bouton_export_csv(edited_pdv_df, client_id, "points_de_vente", "Points de vente", key="export_pdv", cle_table="points_de_vente")
 
 with tab_comptes:
     st.markdown(
@@ -276,7 +287,7 @@ with tab_comptes:
         "LightSpeed, pas ici."
     )
     tri_comptes, decroissant_comptes = _selecteur_tri(
-        {"compte": "Compte", "libelle_compte": "Libellé du compte", "commentaires": "Commentaires"},
+        LIBELLES_COLONNES["comptes_de_vente"],
         defaut="compte",
         cle="comptes",
     )
@@ -297,7 +308,7 @@ with tab_comptes:
         },
     )
     edited_comptes = edited_comptes_df.dropna(how="all").fillna("").to_dict("records")
-    _bouton_export_csv(edited_comptes_df, client_id, "comptes_de_vente", "Comptes de vente PL", key="export_comptes")
+    _bouton_export_csv(edited_comptes_df, client_id, "comptes_de_vente", "Comptes de vente PL", key="export_comptes", cle_table="comptes_de_vente")
     # Les menus déroulants des autres onglets (ci-dessous) se basent volontairement sur l'état
     # ENREGISTRÉ (mappings, chargé une fois en haut de page) plutôt que sur edited_comptes (le
     # retour live de cet éditeur) : sinon, toute frappe ici fait varier la configuration des
@@ -314,7 +325,7 @@ with tab_codes_analytiques:
         "cas ici."
     )
     tri_codes, decroissant_codes = _selecteur_tri(
-        {"code_analytique": "Code analytique", "description": "Description", "commentaires": "Commentaires"},
+        LIBELLES_COLONNES["codes_analytiques"],
         defaut="code_analytique",
         cle="codes_analytiques",
     )
@@ -336,7 +347,8 @@ with tab_codes_analytiques:
     )
     edited_codes_analytiques = edited_codes_analytiques_df.dropna(how="all").fillna("").to_dict("records")
     _bouton_export_csv(
-        edited_codes_analytiques_df, client_id, "codes_analytiques", "Codes Analytique PL", key="export_codes_analytiques"
+        edited_codes_analytiques_df, client_id, "codes_analytiques", "Codes Analytique PL", key="export_codes_analytiques",
+        cle_table="codes_analytiques"
     )
     # Même choix que pour comptes_options ci-dessus : basé sur l'état enregistré, pas le live.
     # Pas de "code - description" ici (contrairement à comptes_options) : le code analytique EST
@@ -361,29 +373,19 @@ with tab_departements:
     # Départements réellement affectés à au moins une ligne d'attribution analytique, tous
     # points de vente/comptes confondus - purement informatif, calculé à la volée (jamais
     # enregistré), pour repérer d'un coup d'œil un département encore orphelin.
-    departements_affectes = {
-        (a.get("categorie_lightspeed") or "").strip().casefold()
-        for a in mappings.get("comptes_analytiques", [])
-        if a.get("categorie_lightspeed")
-    }
+    affectes = departements_affectes(mappings)
     departements_source = [
         {
             **d,
             "compte": _affichage_depuis_code(
                 d.get("compte", ""), mappings.get("comptes_de_vente", []), "compte", "libelle_compte"
             ),
-            "affecte": "✅" if (d.get("categorie_lightspeed") or "").strip().casefold() in departements_affectes else "⚠️ aucune attribution",
+            "affecte": etat_attribution(d.get("categorie_lightspeed", ""), affectes),
         }
         for d in mappings.get("departements", [])
     ]
     tri_departements, decroissant_departements = _selecteur_tri(
-        {
-            "categorie_lightspeed": "Département LightSpeed",
-            "compte": "Compte de vente",
-            "taux_tva": "Taux TVA nominal",
-            "affecte": "Attribution analytique",
-            "commentaires": "Commentaires",
-        },
+        LIBELLES_COLONNES["departements"],
         defaut="categorie_lightspeed",
         cle="departements",
     )
@@ -417,7 +419,7 @@ with tab_departements:
          "taux_tva": d.get("taux_tva", ""), "commentaires": d.get("commentaires", "")}
         for d in edited_departements_df.dropna(how="all").fillna("").to_dict("records")
     ]
-    _bouton_export_csv(edited_departements_df, client_id, "departements", "Départements LS", key="export_departements")
+    _bouton_export_csv(edited_departements_df, client_id, "departements", "Départements LS", key="export_departements", cle_table="departements")
 
 with tab_paiement:
     st.markdown(
@@ -431,13 +433,7 @@ with tab_paiement:
         "ligne spécifique prime alors sur la ligne « TOUS » du même mode de paiement."
     )
     tri_paiement, decroissant_paiement = _selecteur_tri(
-        {
-            "point_de_vente": "Point de vente",
-            "mode_paiement": "Mode de paiement LightSpeed",
-            "compte": "Compte de contrepartie",
-            "libelle_compte": "Libellé du compte",
-            "commentaires": "Commentaires",
-        },
+        LIBELLES_COLONNES["comptes_paiement"],
         defaut="mode_paiement",
         cle="paiement",
     )
@@ -462,7 +458,7 @@ with tab_paiement:
         },
     )
     edited_paiement = edited_paiement_df.dropna(how="all").fillna("").to_dict("records")
-    _bouton_export_csv(edited_paiement_df, client_id, "moyens_paiement", "Moyens de paiements", key="export_paiement")
+    _bouton_export_csv(edited_paiement_df, client_id, "moyens_paiement", "Moyens de paiements", key="export_paiement", cle_table="comptes_paiement")
 
 with tab_pourboires:
     st.markdown(
@@ -478,13 +474,7 @@ with tab_pourboires:
     if not pdv_options:
         st.warning("Ajoutez d'abord des points de vente dans l'onglet « Points de vente » pour pouvoir les choisir ici.")
     tri_pourboires, decroissant_pourboires = _selecteur_tri(
-        {
-            "point_de_vente": "Point de vente",
-            "mode_paiement": "Mode de paiement LightSpeed",
-            "compte": "Compte crédité du pourboire",
-            "libelle_compte": "Libellé du compte",
-            "commentaires": "Commentaires",
-        },
+        LIBELLES_COLONNES["comptes_pourboires"],
         defaut="point_de_vente",
         cle="pourboires",
     )
@@ -508,7 +498,8 @@ with tab_pourboires:
     )
     edited_pourboires = edited_pourboires_df.dropna(how="all").fillna("").to_dict("records")
     _bouton_export_csv(
-        edited_pourboires_df, client_id, "comptes_pourboires", "Comptes de pourboires", key="export_pourboires"
+        edited_pourboires_df, client_id, "comptes_pourboires", "Comptes de pourboires", key="export_pourboires",
+        cle_table="comptes_pourboires"
     )
 
 with tab_paiement_ignores:
@@ -521,7 +512,7 @@ with tab_paiement_ignores:
         "dont on ne sait juste pas où l'imputer (ça, c'est le rôle du compte d'écart, page Réglages)."
     )
     tri_paiement_ignores, decroissant_paiement_ignores = _selecteur_tri(
-        {"mode_paiement": "Mode de paiement à ignorer", "commentaires": "Commentaires"},
+        LIBELLES_COLONNES["modes_paiement_ignores"],
         defaut="mode_paiement",
         cle="paiement_ignores",
     )
@@ -545,18 +536,13 @@ with tab_paiement_ignores:
     edited_paiement_ignores = edited_paiement_ignores_df.dropna(how="all").fillna("").to_dict("records")
     _bouton_export_csv(
         edited_paiement_ignores_df, client_id, "moyens_paiement_ignores", "Moyens de paiements ignorés",
-        key="export_paiement_ignores",
+        key="export_paiement_ignores", cle_table="modes_paiement_ignores",
     )
 
 with tab_tva:
     st.markdown("Compte de **TVA collectée** à utiliser pour chaque taux de TVA rencontré dans les ventes.")
     tri_tva, decroissant_tva = _selecteur_tri(
-        {
-            "taux": "Taux de TVA",
-            "compte": "Compte de TVA collectée",
-            "libelle_compte": "Libellé du compte",
-            "commentaires": "Commentaires",
-        },
+        LIBELLES_COLONNES["comptes_tva"],
         defaut="taux",
         cle="tva",
     )
@@ -580,7 +566,7 @@ with tab_tva:
         },
     )
     edited_tva = edited_tva_df.dropna(how="all").fillna("").to_dict("records")
-    _bouton_export_csv(edited_tva_df, client_id, "taux_tva", "Taux de TVA", key="export_tva")
+    _bouton_export_csv(edited_tva_df, client_id, "taux_tva", "Taux de TVA", key="export_tva", cle_table="comptes_tva")
 
 with tab_attribution:
     st.markdown(
@@ -605,14 +591,6 @@ with tab_attribution:
         cle = (a.get("point_de_vente", ""), a.get("compte", ""), a.get("code_analytique", ""), a.get("famille", ""))
         groupes.setdefault(cle, []).append(a.get("categorie_lightspeed", ""))
     groupes_keys = sorted(groupes.keys())
-    departements_connus = {d.strip().casefold() for d in departements_options}
-
-    def _departements_affiches(deps: list[str]) -> str:
-        parties = []
-        for d in sorted(deps, key=str.casefold):
-            parties.append(f"⚠️ {d}" if d.strip().casefold() not in departements_connus else d)
-        return ", ".join(parties)
-
     groupes_df = pd.DataFrame(
         [
             {
@@ -624,7 +602,7 @@ with tab_attribution:
                 # systématiquement affiché ici.
                 "Code analytique": code,
                 "Famille": famille,
-                "Départements": _departements_affiches(groupes[(pdv, compte, code, famille)]),
+                "Départements": marquer_departements_inconnus(groupes[(pdv, compte, code, famille)], mappings),
             }
             for (pdv, compte, code, famille) in groupes_keys
         ]
@@ -675,7 +653,8 @@ with tab_attribution:
 
     # --- Formulaire unique : édite la ligne sélectionnée, ou en crée une nouvelle ------
     st.markdown(f"#### {'Modifier l’attribution sélectionnée' if selected_key else 'Nouvelle attribution'}")
-    if selected_key and any(d.strip().casefold() not in departements_connus for d in selected_departements):
+    connus = departements_connus(mappings)
+    if selected_key and any(d.strip().casefold() not in connus for d in selected_departements):
         st.caption(
             "⚠️ Un département introuvable dans le référentiel ne peut pas être présélectionné ici : "
             "s'il n'est pas r'ajouté manuellement dans la liste ci-dessous, il sera retiré à l'enregistrement."

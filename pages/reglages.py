@@ -449,8 +449,10 @@ with tab_sauvegarde:
     with st.container(border=True):
         st.markdown("**📊 Export de la Table de correspondance**")
         st.caption(
-            "Pour une simple lecture (tableur, envoi à un tiers) — ne sert pas à la restauration, "
-            "qui utilise le fichier .json ci-dessus."
+            "Un onglet par table, plus les paramètres généraux — avec les mêmes en-têtes et les "
+            "mêmes indicateurs qu'à l'écran (colonne « Attribution analytique », ⚠️ des départements "
+            "introuvables). Pour une simple lecture (tableur, envoi à un tiers) : ne sert pas à la "
+            "restauration, qui utilise le fichier .json ci-dessus."
         )
         st.download_button(
             "Exporter la Table de correspondance (.xlsx, tous les onglets)",
