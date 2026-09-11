@@ -453,3 +453,25 @@ def test_mail_de_succes_sans_pied_de_page_si_url_app_non_configuree():
     traiter_client(graph, client)
 
     assert "http" not in graph.sent[0]["body_html"]
+
+
+def test_plusieurs_adresses_dalerte_sont_decoupees(monkeypatch):
+    # Cas réel rencontré : deux adresses saisies dans le champ « Adresse
+    # d'alerte interne ». Transmise en bloc, la chaîne entière est prise par
+    # Microsoft Graph pour UN destinataire, qu'il ne résout pas
+    # (ErrorInvalidRecipients) - et toute l'alerte est perdue, alors que c'est
+    # précisément le canal qui signale les incidents.
+    from core.email_poller import _alerter, decouper_adresses
+
+    assert decouper_adresses("a@x.fr, b@y.fr") == ["a@x.fr", "b@y.fr"]
+    assert decouper_adresses("a@x.fr;b@y.fr") == ["a@x.fr", "b@y.fr"]
+    assert decouper_adresses("  a@x.fr  ") == ["a@x.fr"]
+    assert decouper_adresses("") == []
+    assert decouper_adresses(None) == []
+
+    monkeypatch.setenv("LSPENNYLANE_ALERTE_INTERNE", "m.hutin@polyskills.fr, compta@groupe-pic.com")
+    graph = FakeGraph()
+    _alerter(graph, "boite@client.example.com", sujet="Test", detail="Détail")
+
+    assert len(graph.sent) == 1
+    assert graph.sent[0]["to_addresses"] == ["m.hutin@polyskills.fr", "compta@groupe-pic.com"]

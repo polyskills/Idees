@@ -194,7 +194,8 @@ with tab_email:
             "Adresse d'alerte interne",
             value=get_app_config().get("alerte_interne", ""),
             help="Destinataire des alertes du service : export non identifié, échec de conversion, "
-            "rapport de consolidation resté sans binôme. Vide = aucune alerte envoyée.",
+            "rapport de consolidation resté sans binôme. Plusieurs adresses possibles, séparées "
+            "par une virgule ou un point-virgule. Vide = aucune alerte envoyée.",
         )
         st.caption(_origine("alerte_interne"))
 

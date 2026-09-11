@@ -430,15 +430,22 @@ def signaler_orphelins(graph, mailbox: str, client_id: str) -> int:
     return nb
 
 
+def decouper_adresses(brut: str | None) -> list[str]:
+    """Découpe une saisie libre en adresses individuelles, séparées par une
+    virgule ou un point-virgule (ex. "compta@..., direction@...").
+
+    Microsoft Graph attend UNE adresse par destinataire : lui transmettre la
+    chaîne entière le fait chercher une boîte dont le nom contient la virgule,
+    et il rejette l'envoi complet (ErrorInvalidRecipients). Tout champ d'adresse
+    saisi à la main doit donc passer par ici."""
+    return [a.strip() for a in re.split(r"[,;]", brut or "") if a.strip()]
+
+
 def _adresses_resultat(pdv: dict | None, repli: str) -> list[str]:
     """Destinataire(s) du résultat pour ce point de vente : le champ
-    adresse_resultat (Table de correspondance) accepte plusieurs adresses
-    séparées par une virgule ou un point-virgule (ex. "compta@..., direction@...").
+    adresse_resultat (Table de correspondance) accepte plusieurs adresses.
     Vide/absent -> repli sur `repli` (l'adresse de réception d'origine)."""
-    brut = ((pdv or {}).get("adresse_resultat") or "").strip()
-    if not brut:
-        return [repli]
-    adresses = [a.strip() for a in re.split(r"[,;]", brut) if a.strip()]
+    adresses = decouper_adresses((pdv or {}).get("adresse_resultat"))
     return adresses or [repli]
 
 
@@ -549,18 +556,22 @@ def _notifier_echec_client(
 
 
 def _alerter(graph, mailbox: str, sujet: str, detail: str) -> None:
-    destinataire = _adresse_alerte_interne()
-    if not destinataire:
-        # Aucune adresse d'alerte configurée (LSPENNYLANE_ALERTE_INTERNE absente) :
-        # rien à envoyer, mais un log explicite évite un échec complètement
-        # silencieux (ni mail, ni trace) en test local sans cette variable.
+    # Découpé comme adresse_resultat : ce champ est saisi à la main (Réglages >
+    # Gestion Email) et y mettre deux adresses séparées par une virgule est
+    # naturel. Transmise en bloc, la chaîne entière serait prise par Graph pour
+    # une seule adresse, et TOUTE l'alerte serait rejetée - donc perdue, alors
+    # que c'est précisément le canal qui signale les incidents.
+    destinataires = decouper_adresses(_adresse_alerte_interne())
+    if not destinataires:
+        # Aucune adresse d'alerte configurée : rien à envoyer, mais un log
+        # explicite évite un échec complètement silencieux (ni mail, ni trace).
         log.warning("[Alerte fetch LightSpeed] %s — %s", sujet, detail)
         return
     graph.send_mail(
         mailbox,
         subject=f"[Alerte fetch LightSpeed] {sujet}",
         body_html=f"<p>{detail}</p>",
-        to_addresses=[destinataire],
+        to_addresses=destinataires,
     )
 
 
