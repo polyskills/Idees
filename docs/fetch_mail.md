@@ -129,6 +129,15 @@ Pour chaque client ayant un tenant + une boîte mail configurés :
 
 ## État actuel
 
-⚠️ Non testé en conditions réelles (pas encore de tenant client ni de
-consentement admin obtenu). La logique métier est couverte par les tests
-automatisés, mais un premier essai réel reste à faire.
+✅ **Éprouvé en conditions réelles le 11/09/2026** : premier cycle sur un tenant
+client, avec conversion comptable et consolidation menées à bien. Le seul
+incident rencontré a été une conversion bloquée sur un mapping manquant —
+c'est-à-dire le comportement attendu, l'outil refusant de convertir sur un
+compte non paramétré plutôt que d'approximer. Le traitement est reparti seul
+après complétion de la table de correspondance.
+
+Un défaut a été corrigé à cette occasion : le champ « Adresse d'alerte interne »
+n'était pas découpé, et deux adresses séparées par une virgule partaient en bloc
+à Microsoft Graph, qui rejetait l'envoi (`ErrorInvalidRecipients`). L'alerte
+était donc perdue — avec, en même temps, le signal de l'incident qu'elle
+transportait. Corrigé en v1.2.

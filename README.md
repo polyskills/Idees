@@ -192,9 +192,10 @@ remplacer ce mécanisme par un nettoyage du vrai dossier `data/`.
   consolidation (BAR, RESTAURANT) vivent dans le code, pas dans le
   référentiel. Elles ne varient donc pas d'un client à l'autre — à déplacer
   dans la Table de correspondance le jour où ce sera nécessaire.
-- **Fetch mail jamais éprouvé en conditions réelles** : toute la logique est
-  couverte par les tests, mais aucun tenant client n'a encore été branché
-  (cf. `docs/fetch_mail.md`).
+- **Identifiants Azure globaux partagés** : le repli global (Réglages >
+  Gestion Email) est commun à tous les clients du serveur. Il ne convient
+  donc que tant qu'un seul tenant est concerné ; au-delà, chaque client doit
+  porter les siens.
 - **Historique fichier, pas de base de données** : suffisant pour un usage
   ponctuel/petite équipe ; à faire évoluer vers une vraie base si le volume
   de conversions ou les besoins de recherche/reporting augmentent.

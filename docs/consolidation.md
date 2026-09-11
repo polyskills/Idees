@@ -126,6 +126,7 @@ attente sont visibles en haut de la page Consolidation. Voir
 - **Les périodes de service sont définies dans le code**, pas dans la table de
   correspondance. Elles ne varient donc pas d'un client à l'autre. Le jour où
   ce sera nécessaire, leur place naturelle sera le référentiel du client.
-- **La réception par mail n'a jamais été éprouvée en conditions réelles** :
-  toute la logique est couverte par les tests, mais aucun tenant client n'a
-  encore été branché (cf. `docs/fetch_mail.md`).
+- **La réception par mail a été éprouvée le 11/09/2026** sur un tenant client
+  (cf. `docs/fetch_mail.md`), mais sur un seul : les cas d'appariement moins
+  courants — envoi tardif du binôme, renvoi d'un rapport corrigé — n'ont pas
+  encore été rencontrés en vrai.
